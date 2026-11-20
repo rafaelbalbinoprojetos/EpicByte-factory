@@ -6,6 +6,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
+sys.path.insert(0,str(ROOT))
+import epicbyte  # noqa: E402  coloca Python, Git, Node e Codex no PATH antes do npm
 npm = 'npm.cmd' if os.name == 'nt' else 'npm'
 if not (ROOT/'frontend/node_modules').is_dir():
     subprocess.run([npm,'ci','--cache',str(ROOT/'.npm-cache')],cwd=ROOT/'frontend',check=True)
