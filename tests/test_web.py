@@ -106,3 +106,15 @@ class SecurityApprovalTests(unittest.TestCase):
             bad = {'verdict': 'APPROVED', 'criteria': [{'index': 0, 'status': 'REJECTED', 'evidence': 'x'}]}
             self.assertFalse(security_approved(bad, d))
             self.assertFalse(security_approved({'verdict': 'APPROVED', 'criteria': [{'index': 0, 'status': 'APPROVED', 'evidence': ''}]}, d))
+
+
+class EvidencePathTests(unittest.TestCase):
+    def test_folder_cited_as_evidence_is_accepted_but_missing_path_is_not(self):
+        from epicbyte.engine import audit_approved
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, 'src', 'sections').mkdir(parents=True)
+            Path(d, 'src', 'App.tsx').write_text('x', encoding='utf-8')
+            spec = {'acceptance_criteria': ['a', 'b']}
+            report = lambda files: {'verdict': 'APPROVED', 'criteria': [{'index': i, 'status': 'APPROVED', 'evidence': 'ok', 'files': files} for i in range(2)]}
+            self.assertTrue(audit_approved(report(['src/sections', 'src/App.tsx']), spec, d))
+            self.assertFalse(audit_approved(report(['src/nao-existe.tsx']), spec, d))

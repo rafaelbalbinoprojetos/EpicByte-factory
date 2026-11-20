@@ -112,7 +112,7 @@ def audit_approved(report, spec, workspace):
         if not isinstance(paths, list):
             return False
         for path in paths:
-            if not relative_file(workspace, path).is_file():
+            if not relative_file(workspace, path).exists():   # arquivo ou pasta citados como evidência
                 return False
     return True
 
@@ -132,7 +132,7 @@ def security_approved(report, workspace):
         if not isinstance(paths, list):
             return False
         for path in paths:
-            if not relative_file(workspace, path).is_file():
+            if not relative_file(workspace, path).exists():   # arquivo ou pasta citados como evidência
                 return False
     return True
 
