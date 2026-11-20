@@ -8,7 +8,7 @@ import time
 import tomllib
 
 from .provider import codex_command, Rpc, stop_process
-from .safety import SafetyError, validate_git
+from .safety import GIT, SafetyError, validate_git
 from .storage import clean
 
 
@@ -71,10 +71,10 @@ def doctor(root, probe=False):
         checks.update(codex='indisponível', authenticated=False, launcher_error=str(error))
     if not checks['authenticated']:
         checks['actions'].append('Executar whoami /user e codex login status no terminal local do usuário que já autenticou o ChatGPT. Iniciar a Factory nesse mesmo contexto autorizado. Não copiar auth.json nem mudar USERPROFILE/CODEX_HOME para emprestar credenciais.')
-    checks['root_git'] = command(['git', 'rev-parse', '--show-toplevel'], root)
+    checks['root_git'] = command([GIT, 'rev-parse', '--show-toplevel'], root)
     existing = root / 'workspaces/mission_001'
     if existing.is_dir():
-        checks['mission_001_git_probe'] = command(['git', '-C', str(existing), 'status', '--short', '--branch'], root)
+        checks['mission_001_git_probe'] = command([GIT, '-C', str(existing), 'status', '--short', '--branch'], root)
         if os.name == 'nt':
             # Static command; no path interpolation into shell code.
             checks['mission_001_owner'] = command([shutil.which('pwsh') or 'powershell.exe', '-NoProfile', '-Command',

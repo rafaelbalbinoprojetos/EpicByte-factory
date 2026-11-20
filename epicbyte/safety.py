@@ -4,6 +4,22 @@ import subprocess
 from pathlib import Path, PureWindowsPath
 
 
+def find_git():
+    """Git do PATH ou da instalação padrão do Windows (o PowerShell nem sempre herda o PATH do Git)."""
+    import shutil
+    found = shutil.which('git')
+    if found:
+        return found
+    for base in (os.environ.get('ProgramFiles', r'C:\Program Files'), os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs')):
+        candidate = Path(base) / 'Git' / 'cmd' / 'git.exe'
+        if candidate.is_file():
+            return str(candidate)
+    return 'git'
+
+
+GIT = find_git()
+
+
 class SafetyError(RuntimeError):
     pass
 
@@ -25,7 +41,7 @@ def relative_file(root, name):
 
 
 def git(workspace, *args):
-    result = subprocess.run(['git', '-C', str(workspace), *args], capture_output=True, text=True, timeout=15)
+    result = subprocess.run([GIT, '-C', str(workspace), *args], capture_output=True, text=True, timeout=15)
     if result.returncode:
         raise SafetyError('Git não validado: ' + result.stderr.strip())
     return result.stdout.strip()

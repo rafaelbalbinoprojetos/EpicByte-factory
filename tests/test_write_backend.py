@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from epicbyte.safety import GIT
 from epicbyte.safety import SafetyError, relative_file, snapshot, IsolationPolicy
 from epicbyte.write_backend import validate_edits, apply_edits, certify, sandbox_command
 
@@ -102,7 +103,7 @@ class WriteBackendTests(unittest.TestCase):
     def test_real_main_repository_rejected(self):
         import subprocess
         from epicbyte.safety import validate_git
-        subprocess.run(['git','init','-b','main',str(self.workspace)], check=True, capture_output=True)
+        subprocess.run([GIT,'init','-b','main',str(self.workspace)], check=True, capture_output=True)
         with self.assertRaises(SafetyError): validate_git(self.workspace)
 
     def test_timeout_stops_sandbox_tree(self):
