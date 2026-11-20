@@ -1,0 +1,128 @@
+{
+  "mission": "Planejar o desenvolvimento de um gerenciador de tarefas em Python com interface de linha de comando, lógica de negócio separada, persistência em JSON e testes com unittest, utilizando exclusivamente a biblioteca padrão. Este plano não representa implementação ou validação concluída.",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "agent": "developer",
+      "description": "Inspecionar o workspace autorizado, identificar instruções locais, estrutura existente e branch atual. Definir a organização dos módulos e o caminho de persistência dentro do workspace antes de implementar.",
+      "acceptance_criteria": [
+        "Registrar os arquivos e instruções relevantes encontrados no workspace.",
+        "Confirmar que a implementação ocorrerá em uma branch diferente da principal.",
+        "Definir módulos separados para domínio, persistência, interface e testes.",
+        "Definir o arquivo JSON dentro de C:\\Projetos\\EpicByte-Factory.",
+        "Registrar eventuais bloqueios de escrita ou execução sem tentar contorná-los."
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "TASK-002",
+      "agent": "developer",
+      "description": "Implementar a lógica de negócio para criar, listar, concluir e excluir tarefas. Cada tarefa terá identificador inteiro positivo único, descrição não vazia e estado de conclusão.",
+      "acceptance_criteria": [
+        "Novas tarefas recebem identificadores únicos e começam pendentes.",
+        "Descrições vazias ou compostas apenas por espaços são rejeitadas.",
+        "A listagem retorna todas as tarefas cadastradas com identificador, descrição e estado.",
+        "Concluir uma tarefa altera somente o estado da tarefa indicada.",
+        "Concluir novamente uma tarefa concluída mantém seu estado sem erro.",
+        "Excluir uma tarefa remove somente a tarefa indicada.",
+        "Operações com identificadores inexistentes retornam um erro controlado.",
+        "A lógica de negócio não depende de input, print ou interação com terminal."
+      ],
+      "dependencies": [
+        "TASK-001"
+      ]
+    },
+    {
+      "id": "TASK-003",
+      "agent": "developer",
+      "description": "Implementar carregamento e salvamento em JSON com validação do formato e preservação dos dados existentes em caso de falha.",
+      "acceptance_criteria": [
+        "Arquivo inexistente inicia uma coleção vazia.",
+        "O JSON armazena identificadores, descrições e estados de conclusão e preserva caracteres acentuados.",
+        "Criar, concluir e excluir tarefas salva o estado atualizado.",
+        "Uma nova instância recupera o estado salvo, sem duplicar identificadores ao criar novas tarefas.",
+        "JSON inválido ou estrutura incompatível gera erro controlado e não é sobrescrito automaticamente.",
+        "O salvamento utiliza arquivo temporário no mesmo diretório e substituição atômica.",
+        "Falhas de leitura ou escrita são informadas sem apresentar a operação como persistida.",
+        "Todos os arquivos de dados e temporários permanecem dentro do workspace autorizado."
+      ],
+      "dependencies": [
+        "TASK-002"
+      ]
+    },
+    {
+      "id": "TASK-004",
+      "agent": "developer",
+      "description": "Implementar uma interface de linha de comando com opções para criar, listar, concluir, excluir tarefas e sair, conectando os módulos de negócio e persistência.",
+      "acceptance_criteria": [
+        "Todas as funcionalidades podem ser executadas pelo terminal.",
+        "A listagem identifica tarefas pendentes e concluídas e informa quando não há tarefas.",
+        "Entradas de menu e identificadores inválidos exibem mensagens claras sem encerrar inesperadamente o programa.",
+        "O programa carrega os dados ao iniciar.",
+        "As mensagens de sucesso são exibidas somente após a persistência bem-sucedida.",
+        "A interface delega regras de negócio e acesso ao JSON aos respectivos módulos."
+      ],
+      "dependencies": [
+        "TASK-002",
+        "TASK-003"
+      ]
+    },
+    {
+      "id": "TASK-005",
+      "agent": "developer",
+      "description": "Criar testes automatizados com unittest e documentação de execução, organização do código, formato dos dados e tratamento de erros.",
+      "acceptance_criteria": [
+        "Os testes cobrem criação, listagem, conclusão, exclusão, descrição inválida e identificador inexistente.",
+        "Os testes cobrem arquivo ausente, recuperação após reinício, caracteres acentuados, JSON inválido, estrutura incompatível e falha de escrita.",
+        "Os testes verificam que arquivos inválidos não são sobrescritos.",
+        "Os testes de persistência usam diretórios temporários dentro do workspace e não alteram dados reais.",
+        "A interface possui testes para entradas inválidas e mensagens de erro de persistência.",
+        "A documentação informa o comando de inicialização e o comando python -m unittest discover -s tests -v.",
+        "A execução dos testes registra comando, código de saída e resultado real, sem resultados presumidos.",
+        "Nenhuma dependência externa é instalada."
+      ],
+      "dependencies": [
+        "TASK-003",
+        "TASK-004"
+      ]
+    },
+    {
+      "id": "TASK-006",
+      "agent": "qa",
+      "description": "Validar independentemente a implementação, executar os testes e verificar o fluxo completo de persistência e o escopo das alterações.",
+      "acceptance_criteria": [
+        "Executar a suíte unittest e registrar saída e código de retorno.",
+        "Validar criar, listar, concluir e excluir tarefas pela interface.",
+        "Encerrar e reiniciar o programa para comprovar a recuperação dos dados.",
+        "Inspecionar o JSON e confirmar que corresponde às operações realizadas.",
+        "Verificar separação entre negócio, persistência e interface e uso exclusivo da biblioteca padrão.",
+        "Revisar o diff e confirmar que a branch principal não foi modificada.",
+        "Conferir caminhos de arquivos gerados e evidências disponíveis de que as alterações ficaram no workspace.",
+        "Emitir relatório por critério com resultado aprovado, reprovado ou bloqueado e respectiva evidência.",
+        "Encaminhar falhas ao Developer e repetir os testes afetados após correção, respeitando limites de tentativas previamente definidos.",
+        "Autorizar o encerramento somente quando todas as tarefas obrigatórias tiverem evidências de implementação e validação independente."
+      ],
+      "dependencies": [
+        "TASK-005"
+      ]
+    }
+  ],
+  "test_strategy": [
+    "Executar testes unitários de domínio sem interação com terminal ou arquivos reais.",
+    "Executar testes de integração da persistência em diretórios temporários internos ao workspace.",
+    "Testar entradas inválidas, dados corrompidos e falhas de escrita com unittest.mock.",
+    "Validar pela interface um ciclo completo de criação, conclusão, exclusão e reinício.",
+    "Submeter código, documentação, diff e resultados a revisão independente pelo agente QA.",
+    "Registrar evidências reais de cada execução; testes não executados devem ser classificados como não verificados.",
+    "Após correções, executar os testes relacionados e a suíte completa antes do aceite final."
+  ],
+  "risks": [
+    "O contexto fornecido permite apenas leitura do filesystem; a implementação depende de um ambiente com escrita autorizada no workspace.",
+    "A estrutura do projeto, as instruções locais e a branch atual ainda não foram inspecionadas.",
+    "Não foram definidos limites de tentativas de correção; esse limite deve ser estabelecido antes de iniciar ciclos de correção.",
+    "Interrupções ou falhas de escrita podem comprometer a persistência; salvamento atômico e testes de erro devem reduzir esse risco.",
+    "Arquivos JSON corrompidos devem bloquear o carregamento com mensagem clara, preservando o conteúdo para recuperação.",
+    "Execuções simultâneas podem sobrescrever alterações; o escopo inicial considera uma única instância do programa.",
+    "Sem evidências de execução e revisão independente, a missão deve permanecer não validada."
+  ]
+}
