@@ -10,7 +10,7 @@ python -m pip install -r requirements.txt
 python scripts/start_local.py
 ```
 
-Abra **o endereço completo exibido pelo servidor**, em `http://127.0.0.1:8765`, com o fragmento temporário da sessão. Não use `localhost`, a porta de desenvolvimento Vite ou uma chave de servidor anterior. A proteção de Host e Origin permanece exata; não foi habilitado CORS externo. A interface e a API são servidas juntas. O primeiro comando só é necessário para preparar a dependência Pillow de validação de imagens.
+Abra **o endereço completo exibido pelo servidor**, em `http://127.0.0.1:8780`, com o fragmento temporário da sessão. Não use `localhost`, a porta de desenvolvimento Vite ou uma chave de servidor anterior. A proteção de Host e Origin permanece exata; não foi habilitado CORS externo. A interface e a API são servidas juntas. O primeiro comando só é necessário para preparar a dependência Pillow de validação de imagens.
 
 ## Fluxo implementado
 
@@ -119,7 +119,7 @@ No PowerShell normal do usuário, na raiz do projeto:
 python scripts/start_local.py
 ```
 
-O comando instala dependências com `npm ci` quando necessário, compila o frontend e serve backend e interface de produção juntos em **127.0.0.1:8765**. Abra no navegador o endereço completo exibido no terminal, incluindo o fragmento de acesso da sessão. Não compartilhe esse endereço. O fragmento é removido da barra após leitura e a chave fica no sessionStorage desta aba; não é credencial do Codex. Reiniciar o servidor invalida as chaves anteriores.
+O comando instala dependências com `npm ci` quando necessário, compila o frontend e serve backend e interface de produção juntos em **127.0.0.1:8780**. Abra no navegador o endereço completo exibido no terminal, incluindo o fragmento de acesso da sessão. Não compartilhe esse endereço. O fragmento é removido da barra após leitura e a chave fica no sessionStorage desta aba; não é credencial do Codex. Reiniciar o servidor invalida as chaves anteriores.
 
 Ctrl+C encerra o servidor, solicita pausa somente aos seus workers e termina suas árvores de processos se não encerrarem no prazo. Nenhum serviço externo ou servidor Vite adicional é necessário. Após interrupção forçada, locks são preservados: use `recover-lock` na CLI, que só libera PID comprovadamente ausente.
 
@@ -200,9 +200,9 @@ python factory.py pause <mission_id>
 python factory.py resume <mission_id>
 python factory.py recover-lock <mission_id>
 python factory.py dry-run missions/task_manager.md --plan missions/task_manager_plan.json
-python factory.py serve --port 8765
+python factory.py serve --port 8780
 ```
 
 Os scripts legados `legacy/test_codex.py` e `legacy/test_mission.py` chamam modelo e não integram a suíte unitária. `scripts/validate_write_host.py` permanece disponível para a missão anterior da calculadora. Não houve push, deploy, troca de credenciais ou alteração global de permissões.
 
-Validação final desta implementação: **80 testes Python e 7 testes React aprovados**, ESLint e build TypeScript/Vite aprovados. O smoke HTTP com o SQLite real retornou 200 para HTML, estado e SSE; encontrou oito agentes e preservou a missão histórica concluída. O encerramento do inicializador deixou a porta 8765 fechada. Evidências: `logs/integration_validation.json` e `logs/mission_control_http.json`. A saída 2 do validador completo indica a interrupção esperada na certificação, não sucesso da missão de integração.
+Validação final desta implementação: **80 testes Python e 7 testes React aprovados**, ESLint e build TypeScript/Vite aprovados. O smoke HTTP com o SQLite real retornou 200 para HTML, estado e SSE; encontrou oito agentes e preservou a missão histórica concluída. O encerramento do inicializador deixou a porta 8780 fechada. Evidências: `logs/integration_validation.json` e `logs/mission_control_http.json`. A saída 2 do validador completo indica a interrupção esperada na certificação, não sucesso da missão de integração.

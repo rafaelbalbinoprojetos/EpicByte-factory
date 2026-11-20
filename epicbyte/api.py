@@ -17,7 +17,7 @@ from .cli import status, create_mission
 from .safety import within, IsolationPolicy
 
 
-def make_server(db, root, port=8765):
+def make_server(db, root, port=8780):
     root = Path(root).resolve()
     initial = Store(db)
     try: Studio(initial, root)
@@ -247,7 +247,7 @@ def make_server(db, root, port=8765):
     return server
 
 
-def serve(store, port=8765):
+def serve(store, port=8780):
     from .cli import ROOT
     db = store.db.execute('PRAGMA database_list').fetchone()[2]
     server = make_server(db,ROOT,port)

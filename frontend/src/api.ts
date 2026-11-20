@@ -12,7 +12,7 @@ export async function apiRequest(access:string,path:string,body?:unknown,signal?
   if(response.status===401||response.status===403)throw new ApiError('Sessão expirada ou acesso negado. Reconecte com o endereço exibido pelo servidor; confirme a origem local.',response.status);
   if(response.status===503)throw new ApiError('Backend temporariamente indisponível. Tente novamente.',503);
   let result;
-  try{result=await response.json()}catch{throw new ApiError('Resposta inválida do backend. Confirme que abriu a porta 8765.')}
+  try{result=await response.json()}catch{throw new ApiError('Resposta inválida do backend. Confirme que abriu a porta 8780.')}
   if(!response.ok)throw new ApiError(result.error||'Requisição negada pelo servidor.',response.status);
   return result;
  }catch(error){

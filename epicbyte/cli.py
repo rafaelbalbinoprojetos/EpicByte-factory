@@ -68,7 +68,7 @@ def main(argv=None):
     sub.add_parser('agents')
     sub.add_parser('doctor').add_argument('--probe', action='store_true', help='Testar App Server/account e comando sandbox sem chamar modelo')
     api = sub.add_parser('serve')
-    api.add_argument('--port', type=int, default=8765)
+    api.add_argument('--port', type=int, default=8780)
     args = parser.parse_args(argv)
     try:
         if args.command == 'doctor':
