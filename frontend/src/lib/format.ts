@@ -1,6 +1,13 @@
 import type {Mission, TaskSpec} from './types';
 
+/** Etapas do fluxo 3.0, na ordem em que acontecem. */
+export const PIPELINE = ['analyst', 'builder', 'reviewer', 'recovery', 'supervisor'] as const;
+
 export const AGENT_LABELS: Record<string, string> = {
+  analyst: 'Analista',
+  builder: 'Builder',
+  reviewer: 'Revisor',
+  recovery: 'Recuperação',
   solution_strategist: 'Solution Strategist',
   product_owner: 'Product Owner',
   architect: 'Architect',

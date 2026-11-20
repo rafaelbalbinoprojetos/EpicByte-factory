@@ -196,9 +196,16 @@ class CodexProvider(Provider):
         finally:
             stop_process(process)
     def execute(self, prompt, workspace, timeout=180, write=False, cancelled=lambda: False, images=None, model=None):
+        # write='build': o agente escreve e testa direto no sandbox (escrita só no workspace, .git protegido, sem rede).
+        # write=True: modo legado, o agente devolve edições e o escritor fixo as aplica.
+        build = write == 'build'
         if write:
             from .safety import IsolationPolicy
             IsolationPolicy().require_write(workspace)
+        if build:
+            prompt += ('\nVocê está num sandbox com escrita no workspace e sem rede: escreva os arquivos com suas ferramentas, '
+                       'rode os testes e verificações do projeto e corrija até passarem. Ao final, responda somente o JSON pedido.')
+        elif write:
             prompt += '\nRetorne JSON com summary, files, issues e edits: [{"path":"caminho relativo","content":"conteudo completo"}]. Nao escreva por ferramentas. Somente criacao/substituicao via edits; comandos e exclusoes recusados.'
         deadline = time.monotonic() + timeout
         process = subprocess.Popen(codex_command() + ['app-server'], cwd=workspace,
@@ -208,7 +215,9 @@ class CodexProvider(Provider):
         try:
             rpc.request('initialize', {'clientInfo': {'name': 'epicbyte-factory', 'version': '1.0.0'}, 'capabilities': None}, deadline, cancelled)
             rpc.send({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}})
-            thread_params = {'cwd': str(workspace), 'approvalPolicy': 'never', 'sandbox': 'read-only'}
+            thread_params = {'cwd': str(workspace), 'approvalPolicy': 'never', 'sandbox': 'workspace-write' if build else 'read-only'}
+            sandbox_policy = ({'type': 'workspaceWrite', 'writableRoots': [str(workspace)], 'networkAccess': False} if build
+                              else {'type': 'readOnly', 'networkAccess': False})
             inputs = [{'type': 'text', 'text': prompt}]
             if images:
                 catalog = rpc.request('model/list', {'limit':100}, deadline, cancelled)
@@ -219,10 +228,10 @@ class CodexProvider(Provider):
                 thread_params['model'] = model
                 inputs += [{'type':'localImage','path':str(path)} for path in images]
             thread = rpc.request('thread/start', thread_params, deadline, cancelled)['thread']['id']
-            turn = rpc.request('turn/start', {'threadId': thread, 'sandboxPolicy': {'type': 'readOnly', 'networkAccess': False}, 'input': inputs}, deadline, cancelled)['turn']['id']
+            turn = rpc.request('turn/start', {'threadId': thread, 'sandboxPolicy': sandbox_policy, 'input': inputs}, deadline, cancelled)['turn']['id']
             result = collect_turn(rpc, thread, turn, deadline, cancelled)
             result.provider = 'codex-app-server'
-            if write:
+            if write and not build:
                 from .executor import object_report
                 from .write_backend import apply_edits
                 if cancelled():

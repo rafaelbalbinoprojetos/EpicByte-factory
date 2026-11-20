@@ -1,4 +1,4 @@
-import {CheckCircle2, Clock3, ExternalLink, RotateCcw, FileCheck2, Layers3, Pause, Play, ShieldCheck, Terminal, Users, XCircle} from 'lucide-react';
+import {AlertTriangle, CheckCircle2, Clock3, ExternalLink, Lightbulb, RotateCcw, FileCheck2, Layers3, Pause, Play, ShieldCheck, Terminal, Users, XCircle} from 'lucide-react';
 import {useNavigate, useParams} from 'react-router-dom';
 import {PageHeading} from '@/components/layout/AppShell';
 import {NewMissionButton} from '@/pages/Dashboard';
@@ -6,12 +6,13 @@ import {StateBadge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Empty, JsonView, Panel, SectionHeading} from '@/components/ui/panel';
 import {useFactory} from '@/hooks/useFactory';
-import {AGENT_LABELS, agentLabel, dateTime, duration, elapsed, progress, taskSpec, title} from '@/lib/format';
+import {AGENT_LABELS, PIPELINE, agentLabel, dateTime, duration, elapsed, progress, taskSpec, title} from '@/lib/format';
 import type {FactoryState, GateResult, Mission} from '@/lib/types';
 import {cn} from '@/lib/cn';
 
 function stageState(data: FactoryState, mission: Mission, agent: string) {
-  const runs = data.executions.filter(e => e.mission === mission.id && e.agent === agent);
+  const names = agent === 'builder' ? ['builder', 'developer'] : [agent];
+  const runs = data.executions.filter(e => e.mission === mission.id && names.includes(e.agent));
   if (runs.some(e => e.status === 'RUNNING')) return 'RUNNING';
   if (runs.some(e => e.status === 'COMPLETED')) return 'COMPLETED';
   return null;
@@ -46,6 +47,61 @@ function QualityGates({data, mission}: {data: FactoryState; mission: Mission}) {
             <span className="font-medium">{g.gate}</span>
             <span className="ml-auto font-mono text-[10px] opacity-80">{g.duration}s</span>
           </button>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function parse<T>(value: string): T | null {
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+/** Pergunta da Recuperação quando só o operador pode decidir. */
+function OperatorQuestion({data, mission}: {data: FactoryState; mission: Mission}) {
+  const event = data.events.find(e => e.mission === mission.id && e.type === 'NEEDS_OPERATOR');
+  if (!event || mission.state !== 'BLOCKED') return null;
+  const question = parse<{question?: string}>(event.data)?.question;
+  return (
+    <div role="alert" className="mb-6 flex gap-3 rounded-(--radius-card) border border-warn-line bg-warn-bg p-5 text-warn">
+      <AlertTriangle size={20} className="mt-0.5 shrink-0" />
+      <div>
+        <strong className="block text-[14px]">Decisão necessária · {event.task}</strong>
+        <p className="m-0 mt-1 text-[13px] leading-relaxed text-ink">{question}</p>
+        <p className="m-0 mt-2 text-[12px] text-ink-muted">Ajuste a missão ou responda criando uma nova versão; depois use Reabrir tarefas e Retomar.</p>
+      </div>
+    </div>
+  );
+}
+
+type Analysis = {summary?: string; improved_request?: string; options?: {option?: string; chosen?: boolean}[]; improvements?: {improvement?: string; adopted?: boolean}[]; risks?: string[]};
+
+/** O que o Analista entendeu e melhorou no pedido. */
+function AnalysisPanel({data, mission}: {data: FactoryState; mission: Mission}) {
+  const event = data.events.find(e => e.mission === mission.id && e.type === 'ANALYSIS');
+  const analysis = event ? parse<Analysis>(event.data) : null;
+  if (!analysis) return null;
+  const adopted = (analysis.improvements || []).filter(i => i.adopted !== false);
+  return (
+    <Panel className="mb-6">
+      <SectionHeading icon={<Lightbulb size={18} />} title="Análise do pedido" aside="Analista" />
+      {analysis.improved_request && <p className="m-0 text-[13px] leading-relaxed text-ink">{analysis.improved_request}</p>}
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {[
+          ['Abordagem escolhida', (analysis.options || []).filter(o => o.chosen).map(o => o.option)],
+          ['Melhorias adotadas', adopted.map(i => i.improvement)],
+          ['Riscos tratados', analysis.risks || []],
+        ].map(([label, items]) => (
+          <div key={label as string}>
+            <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#5d8299]">{label as string}</div>
+            <ul className="m-0 pl-4 text-[12px] leading-relaxed text-ink-muted">
+              {(items as (string | undefined)[]).filter(Boolean).slice(0, 6).map(item => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
         ))}
       </div>
     </Panel>
@@ -103,7 +159,7 @@ function MissionDetail({data, mission}: {data: FactoryState; mission: Mission}) 
       </div>
 
       <ol className="m-0 mb-6 flex list-none flex-wrap gap-2 p-0" aria-label="Etapas do pipeline">
-        {Object.keys(AGENT_LABELS).map(agent => {
+        {PIPELINE.map(agent => {
           const state = stageState(data, mission, agent);
           return (
             <li
@@ -135,6 +191,8 @@ function MissionDetail({data, mission}: {data: FactoryState; mission: Mission}) 
         </details>
       </Panel>
 
+      <OperatorQuestion data={data} mission={mission} />
+      <AnalysisPanel data={data} mission={mission} />
       <QualityGates data={data} mission={mission} />
       <SectionHeading icon={<Layers3 size={18} />} title="Pipeline de execução" aside="Dependências validadas pelo Python" />
       {mission.tasks.length ? (

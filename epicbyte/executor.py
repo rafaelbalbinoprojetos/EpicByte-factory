@@ -5,6 +5,8 @@ from pathlib import Path
 from .storage import now, clean
 from .provider import ProviderError
 
+BUILD_TIMEOUT = 900
+
 
 def object_report(text):
     text = text.strip()
@@ -37,8 +39,10 @@ class AgentExecutor:
             store.event(mission, 'AGENT_STARTED', task, agent=agent, execution=execution)
         started = time.monotonic()
         try:
+            # O Builder escreve, testa e corrige no mesmo turno: recebe pelo menos 15 minutos.
+            agent_limit = max(self.timeout, BUILD_TIMEOUT) if write == 'build' else self.timeout
             result = self.provider.execute(prompt, store.mission(mission)['workspace'],
-                                           min(self.timeout, timeout or self.timeout), write,
+                                           min(agent_limit, timeout or agent_limit), write,
                                            lambda: bool(store.mission(mission)['pause']))
             report = object_report(result.text)
             with store.db:

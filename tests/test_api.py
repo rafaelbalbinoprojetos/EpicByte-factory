@@ -40,7 +40,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.call(host='evil.test')[0],403)
         self.assertEqual(self.call(origin='https://evil.test')[0],403)
         code,body=self.call();self.assertEqual(code,200)
-        state=json.loads(body);self.assertEqual(len(state['agents']),9);self.assertEqual(state['missions'][0]['id'],'mission_test')
+        state=json.loads(body);self.assertEqual(len(state['agents']),6);self.assertEqual(state['missions'][0]['id'],'mission_test')
         self.assertFalse(state['diagnostic']['isolation_certified'])
     def test_mutation_rejects_csrf_and_missing_auth(self):
         self.assertEqual(self.call('/api/missions/mission_test/pause',{})[0],403)

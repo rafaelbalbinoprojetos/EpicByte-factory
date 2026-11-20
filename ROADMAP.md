@@ -22,6 +22,14 @@ Cada marco entrega algo que funciona de ponta a ponta antes do próximo.
 
 **Pronto quando:** uma landing page simples termina com o site abrindo pelo botão e verificações verdes.
 
+## Fluxo 3.0 — autonomia e velocidade
+- [x] Analista único no lugar de Strategist → PO → Architect → Planner
+- [x] Builder escreve e testa no sandbox (workspaceWrite, sem rede); motor desfaz mudanças em package.json
+- [x] Revisor único (critérios + código + segurança): 2 chamadas por tarefa em vez de 4
+- [x] Repetição automática de falhas de infraestrutura; agente de Recuperação antes de chamar o operador
+- [x] Ensaio de ponta a ponta (scripts/rehearsal.py) obrigatório antes de missões reais
+- [ ] Recuperação capaz de dividir uma tarefa grande em duas
+
 ## Marco 3 — Agentes especialistas
 - [ ] Frontend Developer (UI, responsividade, acessibilidade, animação)
 - [ ] Design Reviewer (screenshots celular/desktop comparados ao Design Brief)

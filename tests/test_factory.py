@@ -39,17 +39,17 @@ class MockProvider:
             raise self.fail
         if cancelled():
             raise ProviderError('Paused')
-        if '— code_reviewer' in prompt and self.reject:
+        if '— reviewer' in prompt and self.reject:
             self.reject -= 1
             report = {'verdict': 'REJECTED', 'issues': ['Fix fixture inspection']}
         elif '— supervisor' in prompt:
             report = {'verdict': 'APPROVED', 'evidence': 'All tasks audited'}
-        elif '— planner' in prompt:
-            report = plan()
-        elif '— product_owner' in prompt or '— architect' in prompt:
-            report = {'summary': 'Inspect fixture'}
+        elif '— analyst' in prompt:
+            report = {'summary': 'Inspect fixture', 'improved_request': 'Inspect fixture', **plan()}
+        elif '— recovery' in prompt:
+            report = {'diagnosis': 'Repetição', 'action': 'escalate', 'question': 'Como seguir?'}
         else:
-            report = approval()
+            report = {**approval(), 'security': {'verdict': 'APPROVED', 'issues': []}}
         commands = [{'type': 'commandExecution', 'status': 'completed', 'command': 'fixture-test', 'exitCode': 0, 'aggregatedOutput': 'fixture verified'}] if self.commands else []
         return Result(json.dumps(report), 'same' if self.same_thread else f'thread-{len(self.calls)}', 'turn-1', commands)
 
@@ -166,20 +166,18 @@ class WorkflowTests(Base):
         self.engine(provider).run('m')
         self.assertEqual(self.store.mission('m')['state'], 'COMPLETED')
         self.assertTrue(all(t['state'] == 'APPROVED' for t in self.store.tasks('m')))
-        self.assertEqual(len(provider.calls), 13)
+        self.assertEqual(len(provider.calls), 7)   # 3 tarefas x (Builder + Revisor) + Supervisor (antes: 13)
 
     def test_planning_roles(self):
         provider = MockProvider()
         self.engine(provider).run('m')
         self.assertEqual(self.store.mission('m')['state'], 'COMPLETED')
-        self.assertTrue(any('— product_owner' in p for p in provider.calls))
-        self.assertTrue(any('— architect' in p for p in provider.calls))
-        self.assertTrue(any('— planner' in p for p in provider.calls))
+        self.assertEqual(sum('— analyst' in p for p in provider.calls), 1)   # um Analista planeja tudo
 
     def test_direct_mission_is_explicitly_approved_for_planning(self):
         provider = MockProvider()
         self.engine(provider).run('m')
-        planning = [c for c in provider.calls if any(r in c for r in ('— solution_strategist', '— product_owner', '— planner'))]
+        planning = [c for c in provider.calls if '— analyst' in c]
         self.assertTrue(planning and all('APROVADO PELO OPERADOR' in c for c in planning))
 
     def test_correction_then_approval(self):
@@ -201,7 +199,8 @@ class WorkflowTests(Base):
         self.engine(MockProvider(fail=TimeoutError('timeout')), max_attempts=2).run('m')
         self.assertEqual(self.store.tasks('m')[0]['state'], 'BLOCKED')
         self.assertEqual(self.store.tasks('m')[0]['attempts'], 2)
-        self.assertEqual(self.store.db.execute("SELECT count(*) FROM executions WHERE status='FAILED'").fetchone()[0], 2)
+        # tempo esgotado é infraestrutura: repetido até 3 vezes por rodada antes de contar como falha
+        self.assertGreaterEqual(self.store.db.execute("SELECT count(*) FROM events WHERE type='INFRA_RETRY'").fetchone()[0], 4)
 
     def test_missing_real_commands_rejected(self):
         self.store.save_plan('m', plan())
@@ -236,7 +235,7 @@ class WorkflowTests(Base):
         provider = MockProvider()
         self.engine(provider).run('m')
         self.assertEqual(self.store.mission('m')['state'], 'COMPLETED')
-        self.assertEqual(len(provider.calls), 5)
+        self.assertEqual(len(provider.calls), 3)   # T1 de leitura: agente + revisor; depois o supervisor
         self.assertEqual(self.store.tasks('m')[0]['attempts'], 0)
 
     def test_recovery_marks_execution_interrupted(self):
@@ -393,7 +392,7 @@ class Pipeline21Tests(Base):
     def test_agent_execution_order(self):
         self.engine(MockProvider()).run('m')
         agents=[r[0] for r in self.store.db.execute('SELECT agent FROM executions ORDER BY id')]
-        self.assertEqual(agents,['solution_strategist','product_owner','architect','planner','developer','code_reviewer','qa','security_reviewer','supervisor'])
+        self.assertEqual(agents,['analyst','developer','reviewer','supervisor'])
 
 
 if __name__ == '__main__':

@@ -40,8 +40,8 @@ MISSION_TRANSITIONS = {
     'BLOCKED': {'PLANNING', 'RUNNING', 'PAUSED'},
     'FAILED': {'PLANNING', 'RUNNING'}, 'COMPLETED': set(),
 }
-AGENTS = ('solution_strategist', 'product_owner', 'architect', 'planner', 'developer',
-          'code_reviewer', 'qa', 'security_reviewer', 'supervisor')
+# Time ativo (fluxo 3.0). Os demais arquivos de agents/ ficam para histórico e para o Studio.
+AGENTS = ('solution_strategist', 'analyst', 'builder', 'reviewer', 'recovery', 'supervisor')
 
 
 def validate_plan(plan):

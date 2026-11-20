@@ -19,6 +19,44 @@ DIRECT_AUTHORIZATION = ('APROVADO PELO OPERADOR: esta missão foi escrita e cria
                         'Somente recomendações extras, que não estão no texto da missão, continuam fora do escopo.')
 
 
+ANALYST_CONTRACT = {
+    'summary': 'string', 'improved_request': 'string (pedido reescrito, claro e completo)',
+    'options': [{'option': 'string', 'pros': 'string', 'cons': 'string', 'chosen': True}],
+    'improvements': [{'improvement': 'string', 'adopted': True, 'reason': 'string'}],
+    'risks': ['string'], 'design_brief': {'stack': 'string', 'structure': 'string', 'visual': 'string'},
+    'tasks': [{'id': 'TASK-001', 'agent': 'developer', 'mode': 'write', 'description': 'string', 'acceptance_criteria': ['string'], 'dependencies': []}],
+}
+REVIEWER_CONTRACT = {
+    'verdict': 'APPROVED|REJECTED',
+    'criteria': [{'index': 0, 'status': 'APPROVED|REJECTED', 'evidence': 'string', 'files': ['relative path']}],
+    'security': {'verdict': 'APPROVED|REJECTED', 'issues': ['string']},
+    'issues': ['string (acionável: o que, onde, como corrigir)'], 'suggestions': ['string'],
+}
+RECOVERY_CONTRACT = {'diagnosis': 'string', 'action': 'retry_with_guidance|escalate', 'guidance': 'string', 'question': 'string'}
+RETRY_NOTE = 'A tentativa anterior falhou por infraestrutura (tempo esgotado ou resposta fora do formato). Seja objetivo e responda somente o JSON do contrato.'
+LOCKED = ('package.json', 'package-lock.json', '.npmrc', 'npm-shrinkwrap.json')
+
+
+def infrastructure_failure(error):
+    text = f'{type(error).__name__} {error}'.lower()
+    return any(k in text for k in ('tempo', 'timeout', 'timed out', 'json', 'expecting', 'incomplete', 'conexão', 'connection', 'relatório deve ser objeto'))
+
+
+def revert_locked(workspace):
+    """O Builder escreve direto no sandbox; dependências e scripts continuam travados: o motor desfaz qualquer mudança neles."""
+    import subprocess
+    from .safety import GIT
+    status = subprocess.run([GIT, '-C', str(workspace), 'status', '--porcelain', '--', *LOCKED], capture_output=True, text=True, timeout=30)
+    changed = [line[3:].strip() for line in status.stdout.splitlines() if line.strip()]
+    for name in changed:
+        tracked = subprocess.run([GIT, '-C', str(workspace), 'ls-files', '--error-unmatch', name], capture_output=True, timeout=30).returncode == 0
+        if tracked:
+            subprocess.run([GIT, '-C', str(workspace), 'checkout', '--', name], capture_output=True, timeout=30)
+        else:
+            (Path(workspace) / name).unlink(missing_ok=True)
+    return changed
+
+
 @dataclass
 class Limits:
     max_executions: int = 100
@@ -168,14 +206,11 @@ class WorkflowEngine:
             if not store.tasks(mission):
                 if m['state'] != 'PLANNING':
                     store.transition(mission, 'PLANNING')
-                context = {'mission': m['source'], 'contract': {'summary': 'string', 'acceptance_criteria': ['string']}}
+                context = {'mission': m['source']}
                 has_brief = bool(store.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='briefs'").fetchone()
                                  and store.db.execute('SELECT 1 FROM briefs WHERE mission=?', (mission,)).fetchone())
                 if not has_brief:
                     context['authorization'] = DIRECT_AUTHORIZATION
-                strategy, _ = self.call(mission, 'solution_strategist', {**context, 'scope_policy':'A missão contém o único escopo autorizado. Recomendações são somente informativas e não podem entrar no plano.'})
-                product, _ = self.call(mission, 'product_owner', {**context, 'strategy': strategy, 'scope_policy':'Use somente a missão aprovada; exclua recomendações não autorizadas.'})
-                architecture, _ = self.call(mission, 'architect', {**context, 'product': product})
                 approved_ids = None
                 if store.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='briefs'").fetchone():
                     approval = store.db.execute('SELECT a.data FROM scope_approvals a JOIN briefs b ON b.id=a.brief WHERE b.mission=? ORDER BY a.version DESC LIMIT 1',(mission,)).fetchone()
@@ -183,10 +218,14 @@ class WorkflowEngine:
                         approved_ids = [f['id'] for f in json.loads(approval[0])['features']]
                         context['approved_feature_ids'] = approved_ids
                         context['task_traceability'] = 'Cada tarefa deve incluir feature_ids: lista não vazia apenas dos IDs aprovados.'
-                plan, _ = self.call(mission, 'planner', {**context, 'product': product, 'architecture': architecture,
-                    'contract': {'tasks': [{'id': 'TASK-001', 'agent': 'developer|qa', 'mode': 'write|read-only', 'description': 'string', 'acceptance_criteria': ['string'], 'dependencies': []}]}})
+                if is_web(m['workspace']):
+                    context['project'] = 'Projeto web criado do template web-react (React, TypeScript, Tailwind, Motion, GSAP). Leia AGENTS.md no workspace.'
+                analysis, _ = self.call_retry(mission, 'analyst', {**context, 'contract': ANALYST_CONTRACT})
+                with store.db:
+                    store.event(mission, 'ANALYSIS', **{k: analysis.get(k) for k in ('summary', 'improved_request', 'options', 'improvements', 'risks', 'design_brief')})
+                plan = {'tasks': analysis.get('tasks')}
                 if approved_ids is not None: validate_approved_tasks(plan, approved_ids)
-                if not has_brief and is_web(m['workspace']) and not any(isinstance(t, dict) and t.get('agent') == 'developer' and t.get('mode', 'write') == 'write' for t in plan.get('tasks', [])):
+                if not has_brief and is_web(m['workspace']) and not any(isinstance(t, dict) and t.get('agent') == 'developer' and t.get('mode', 'write') == 'write' for t in plan.get('tasks') or []):
                     raise ProviderError('Plano sem nenhuma tarefa de implementação para uma missão aprovada pelo operador')
                 store.save_plan(mission, validate_plan(plan))
             if store.mission(mission)['state'] != 'RUNNING':
@@ -227,8 +266,7 @@ class WorkflowEngine:
         spec = json.loads(task['spec'])
         workspace = Path(store.mission(mission)['workspace'])
         if task['attempts'] >= self.limits.max_attempts:
-            self.block(mission, ident, 'Limite de tentativas')
-            return
+            return self.exhausted(mission, ident, 'Limite de tentativas')
         write = spec.get('mode', 'write') == 'write' and spec['agent'] == 'developer'
         try:
             if write:
@@ -240,31 +278,36 @@ class WorkflowEngine:
             with store.db:
                 store.db.execute('UPDATE tasks SET attempts=attempts+1 WHERE mission=? AND id=?', (mission, ident))
                 store.event(mission, 'TASK_STARTED', ident, before=before)
-            previous = [dict(r) for r in store.db.execute('SELECT agent,report,status FROM executions WHERE mission=? AND task=? ORDER BY id DESC LIMIT 8', (mission, ident))]
-            context = {'mission': store.mission(mission)['source'], 'task': spec, 'previous': previous,
-                       'workspace': str(workspace), 'contract': {'summary': 'string', 'files': ['relative path'], 'issues': ['string']}}
             web = is_web(workspace)
+            context = {'mission': store.mission(mission)['source'], 'task': spec, 'workspace': str(workspace),
+                       'analysis': self.latest(mission, None, 'ANALYSIS'),
+                       'contract': {'summary': 'string', 'files': ['relative path'], 'checks': [{'command': 'string', 'exit_code': 0}], 'issues': ['string']}}
+            feedback = self.feedback(mission, ident)
+            context.update({k: v for k, v in feedback.items() if v})
             if web:
-                last = store.db.execute("SELECT data FROM events WHERE mission=? AND task=? AND type='QUALITY_GATES' ORDER BY seq DESC LIMIT 1", (mission, ident)).fetchone()
-                context['project'] = ('Projeto web do template web-react (leia AGENTS.md). Dependências e package.json são travados. '
-                                      'O motor roda typecheck, lint, test, build e npm audit no sandbox com escrita e envia o resultado em quality_gates; tudo precisa passar. '
-                                      'Em sessão somente leitura NÃO rode npm run test nem npm run build (precisam gravar cache e dist e falham com EPERM): '
-                                      'use quality_gates como evidência de testes e build, e comandos de leitura (npx tsc --noEmit, npx eslint src, rg, Get-Content) para inspecionar.')
-                if last:
-                    context['last_quality_gates'] = json.loads(last[0])
+                context['project'] = 'Projeto web do template web-react (leia AGENTS.md). Dependências e package.json são travados.'
+            agent = 'builder' if write else spec['agent']
+            mode = 'build' if write else False
             try:
-                developer, dev_result = self.call(mission, spec['agent'], context, ident, write)
+                developer, dev_result = self.call_retry(mission, agent, context, ident, mode)
             finally:
-                # Preserve partial-write evidence even on timeout, pause or invalid JSON.
+                # Preserva a evidência mesmo com tempo esgotado, pausa ou JSON inválido.
                 after = snapshot(workspace)
                 diff = {'before': before, 'after': after, 'modified': sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))}
                 with store.db:
                     store.event(mission, 'WORKSPACE_DIFF', ident, **diff)
             self.record_evidence(mission, ident, 'developer', dev_result)
             if not write and before != after:
-                raise SafetyError('Read-only agent modified workspace')
+                raise SafetyError('Agente somente leitura alterou o workspace')
+            if write:
+                reverted = revert_locked(workspace)
+                if reverted:
+                    with store.db:
+                        store.event(mission, 'LOCKED_FILES_REVERTED', ident, files=reverted)
+                    after = snapshot(workspace)
+                    return self.fix(mission, ident)
             gates = None
-            if web:   # também em tarefas de revisão: o QA não consegue rodar testes/build em modo somente leitura
+            if web:
                 self.isolation.require_write(workspace)
                 gates = run_gates(workspace)
                 with store.db:
@@ -276,42 +319,24 @@ class WorkflowEngine:
                         store.event(mission, 'GATES_FAILED', ident, failed=[g['gate'] for g in gates['results'] if not g['passed']])
                     return self.fix(mission, ident)
             store.transition(mission, 'REVIEW', ident)
-            contract = {'verdict': 'APPROVED|REJECTED|BLOCKED', 'criteria': [{'index': 0, 'status': 'APPROVED|REJECTED|BLOCKED', 'evidence': 'string', 'files': []}], 'issues': ['string']}
-            context = {**context, 'developer': developer, 'diff': diff, 'contract': contract}
+            review_context = {**context, 'builder': developer, 'diff': diff, 'contract': REVIEWER_CONTRACT}
+            review_context.pop('reviewer_feedback', None)
             if gates:
-                context['quality_gates'] = gates
-            independent_threads = {dev_result.thread}
-            for agent in ('code_reviewer',):
-                report, result = self.call(mission, agent, context, ident)
-                if result.thread in independent_threads:
-                    raise ProviderError('Auditoria deve usar sessão independente')
-                independent_threads.add(result.thread)
-                if not audit_approved(report, spec, workspace):
-                    with store.db:
-                        store.event(mission, 'REVIEW_REJECTED', ident, agent=agent, report=report)
-                    return self.fix(mission, ident)
-                self.record_evidence(mission, ident, agent, result)
-            store.transition(mission, 'TESTING', ident)
-            report, result = self.call(mission, 'qa', {**context, 'requirement': 'Execute testes reais; registre comandos via ferramentas; declarações não são evidência.'}, ident)
-            approved = result.thread not in independent_threads and audit_approved(report, spec, workspace) and test_evidence(result, report)
-            with store.db:
-                store.event(mission, 'TESTS_PASSED' if approved else 'TESTS_FAILED', ident, report=report, commands=result.commands)
+                review_context['quality_gates'] = gates
+            report, result = self.call_retry(mission, 'reviewer', review_context, ident)
+            if result.thread == dev_result.thread:
+                raise ProviderError('Revisão deve usar sessão independente')
             if snapshot(workspace) != after:
-                raise SafetyError('Auditoria alterou arquivos do workspace')
+                raise SafetyError('Revisão alterou arquivos do workspace')
+            security = report.get('security') if isinstance(report.get('security'), dict) else {}
+            approved = (audit_approved(report, spec, workspace) and security.get('verdict') == 'APPROVED'
+                        and (web or test_evidence(result, report)))
+            with store.db:
+                store.event(mission, 'REVIEW_APPROVED' if approved else 'REVIEW_REJECTED', ident, agent='reviewer', report=report, commands=result.commands)
             if not approved:
                 return self.fix(mission, ident)
-            self.record_evidence(mission, ident, 'qa', result)
-            independent_threads.add(result.thread)
-            security, security_result = self.call(mission, 'security_reviewer', context, ident)
-            if security_result.thread in independent_threads:
-                raise ProviderError('Auditoria deve usar sessão independente')
-            if snapshot(workspace) != after:
-                raise SafetyError('Auditoria alterou arquivos do workspace')
-            if not security_approved(security, workspace):
-                with store.db:
-                    store.event(mission, 'REVIEW_REJECTED', ident, agent='security_reviewer', report=security)
-                return self.fix(mission, ident)
-            self.record_evidence(mission, ident, 'security_reviewer', security_result)
+            self.record_evidence(mission, ident, 'reviewer', result)
+            store.transition(mission, 'TESTING', ident)
             store.transition(mission, 'APPROVED', ident)
             with store.db:
                 store.event(mission, 'TASK_APPROVED', ident, snapshot=after)
@@ -340,6 +365,40 @@ class WorkflowEngine:
             else:
                 raise
 
+    def latest(self, mission, task, kind):
+        if task is None:
+            row = self.store.db.execute('SELECT data FROM events WHERE mission=? AND type=? ORDER BY seq DESC LIMIT 1', (mission, kind)).fetchone()
+        else:
+            row = self.store.db.execute('SELECT data FROM events WHERE mission=? AND task=? AND type=? ORDER BY seq DESC LIMIT 1', (mission, task, kind)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def feedback(self, mission, task):
+        """O que a rodada anterior desta tarefa revelou: falha das verificações, apontamentos do Revisor e orientação da Recuperação."""
+        last_gates = self.latest(mission, task, 'QUALITY_GATES')
+        rejected = self.latest(mission, task, 'REVIEW_REJECTED')
+        guidance = self.latest(mission, task, 'RECOVERY_GUIDANCE')
+        reverted = self.latest(mission, task, 'LOCKED_FILES_REVERTED')
+        return {
+            'last_quality_gates': last_gates if last_gates and not last_gates.get('passed') else None,
+            'reviewer_feedback': (rejected or {}).get('report', {}).get('issues') if rejected else None,
+            'guidance': (guidance or {}).get('guidance'),
+            'locked_files_reverted': (reverted or {}).get('files'),
+        }
+
+    def call_retry(self, mission, agent, context, task=None, write=False):
+        """Falha de infraestrutura (tempo esgotado, resposta fora do formato, conexão) não é erro da tarefa:
+        repete o mesmo agente até 2 vezes antes de deixar a falha seguir."""
+        for attempt in range(3):
+            try:
+                return self.call(mission, agent, context if attempt == 0 else {**context, 'retry': RETRY_NOTE}, task, write)
+            except (ProviderUnavailable, SafetyError):
+                raise
+            except Exception as error:
+                if self.store.mission(mission)['pause'] or not infrastructure_failure(error) or attempt == 2:
+                    raise
+                with self.store.db:
+                    self.store.event(mission, 'INFRA_RETRY', task, agent=agent, error=str(error)[:300], attempt=attempt + 1)
+
     def record_evidence(self, mission, task, role, result):
         store = self.store
         attempt = next(t['attempts'] for t in store.tasks(mission) if t['id'] == task)
@@ -351,11 +410,41 @@ class WorkflowEngine:
         store = self.store
         row = next(t for t in store.tasks(mission) if t['id'] == task)
         if row['fixes'] >= self.limits.max_fixes or row['attempts'] >= self.limits.max_attempts:
-            return self.block(mission, task, 'Limite de 3 ciclos de correção ou tentativas atingido')
+            return self.exhausted(mission, task, 'Limite de ciclos de correção ou tentativas atingido')
         store.transition(mission, 'FIX_REQUIRED', task)
         with store.db:
             store.db.execute('UPDATE tasks SET fixes=fixes+1 WHERE mission=? AND id=?', (mission, task))
             store.event(mission, 'FIX_REQUESTED', task, cycle=row['fixes']+1)
+
+    def exhausted(self, mission, task, reason):
+        """Antes de chamar um humano, o agente de Recuperação investiga e tenta destravar (uma vez por tarefa)."""
+        store = self.store
+        if store.db.execute("SELECT 1 FROM events WHERE mission=? AND task=? AND type='RECOVERY_DECISION'", (mission, task)).fetchone():
+            return self.block(mission, task, reason + ' (recuperação já tentada)')
+        spec = json.loads(next(t for t in store.tasks(mission) if t['id'] == task)['spec'])
+        history = [dict(r) for r in store.db.execute('SELECT agent,status,report FROM executions WHERE mission=? AND task=? ORDER BY id DESC LIMIT 10', (mission, task))]
+        try:
+            decision, _ = self.call_retry(mission, 'recovery', {'mission': store.mission(mission)['source'], 'task': spec, 'history': history,
+                                                                'analysis': self.latest(mission, None, 'ANALYSIS'), **self.feedback(mission, task),
+                                                                'contract': RECOVERY_CONTRACT}, task)
+        except ProviderUnavailable:
+            raise
+        except Exception as error:
+            return self.block(mission, task, f'{reason}; recuperação falhou: {error}')
+        with store.db:
+            store.event(mission, 'RECOVERY_DECISION', task, **{k: decision.get(k) for k in ('action', 'diagnosis', 'guidance', 'question')})
+        if decision.get('action') == 'retry_with_guidance' and str(decision.get('guidance') or '').strip():
+            current = next(t for t in store.tasks(mission) if t['id'] == task)['state']
+            if current != 'FIX_REQUIRED':
+                store.transition(mission, 'FIX_REQUIRED', task)
+            with store.db:
+                store.db.execute('UPDATE tasks SET attempts=0, fixes=0 WHERE mission=? AND id=?', (mission, task))
+                store.event(mission, 'RECOVERY_GUIDANCE', task, guidance=decision['guidance'])
+            return None
+        question = str(decision.get('question') or reason)
+        with store.db:
+            store.event(mission, 'NEEDS_OPERATOR', task, question=question)
+        return self.block(mission, task, 'Decisão do operador necessária: ' + question)
 
     def block(self, mission, task, reason):
         store = self.store

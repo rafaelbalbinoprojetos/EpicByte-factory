@@ -123,7 +123,10 @@ class Store:
             if task and target == 'APPROVED':
                 attempt = self.db.execute('SELECT attempts FROM tasks WHERE mission=? AND id=?', (mission, task)).fetchone()[0]
                 proofs = self.db.execute('SELECT role,thread FROM evidence WHERE mission=? AND task=? AND attempt=?', (mission, task, attempt)).fetchall()
-                if {p['role'] for p in proofs} != {'developer', 'code_reviewer', 'security_reviewer', 'qa'} or len({p['thread'] for p in proofs}) != 4:
+                roles, threads = {p['role'] for p in proofs}, {p['thread'] for p in proofs}
+                legacy = roles == {'developer', 'code_reviewer', 'security_reviewer', 'qa'} and len(threads) == 4
+                current = roles == {'developer', 'reviewer'} and len(threads) == 2   # fluxo 3.0: Builder + Revisor independente
+                if not (legacy or current):
                     raise ValueError('Aprovação exige evidências independentes da tentativa atual')
             if not task and target == 'COMPLETED' and (not self.tasks(mission) or any(t['state'] != 'APPROVED' for t in self.tasks(mission))):
                 raise ValueError('Missão possui tarefas não aprovadas')

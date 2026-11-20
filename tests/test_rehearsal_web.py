@@ -24,7 +24,6 @@ from epicbyte.engine import Limits, WorkflowEngine
 from epicbyte.provider import Result
 from epicbyte.safety import GIT
 from epicbyte.storage import Store
-from epicbyte.write_backend import apply_edits
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -109,51 +108,75 @@ def approval(files, count=3):
 
 
 class ScriptedAgents:
-    """Responde como os agentes, a partir do marcador AGENT=<nome> das instruções do ensaio."""
+    """Responde como os agentes do fluxo 3.0, a partir do marcador AGENT=<nome> das instruções do ensaio."""
 
     def __init__(self):
         self.calls = []
-        self.dev_rounds = {'TASK-001': 0, 'TASK-002': 0}
-        self.code_review_rejected = False
+        self.rounds = {'TASK-001': 0, 'TASK-002': 0}
+        self.reviews = {'TASK-001': 0, 'TASK-002': 0}
+        self.saw = {'gates_feedback': False, 'locked_feedback': False, 'reviewer_feedback': False, 'guidance': False}
 
     def execute(self, prompt, workspace, timeout=180, write=False, cancelled=lambda: False):
         agent = prompt.split('AGENT=', 1)[1].split()[0]
         task = next((t for t in ('TASK-001', 'TASK-002') if f'"id": "{t}"' in prompt), None)
-        self.calls.append((agent, task))
+        self.calls.append((agent, task, write))
         commands = [{'type': 'commandExecution', 'status': 'completed', 'command': 'npx tsc --noEmit -p .', 'exitCode': 0, 'aggregatedOutput': ''}]
-        if agent == 'planner':
-            report = plan()
-        elif agent in ('solution_strategist', 'product_owner', 'architect'):
-            report = {'summary': 'Escopo aprovado pelo operador', 'acceptance_criteria': ['Hero', 'Rodapé']}
+        if agent == 'analyst':
+            report = {'summary': 'Landing de ensaio', 'improved_request': 'Hero e rodapé acessíveis', 'options': [], 'improvements': [],
+                      'risks': [], 'design_brief': {'visual': 'escuro e dourado'}, **plan()}
         elif agent == 'supervisor':
             report = {'verdict': 'APPROVED', 'evidence': 'Todas as tarefas auditadas'}
-        elif agent == 'developer':
-            report = self.develop(task, workspace)
-        elif agent == 'code_reviewer' and task == 'TASK-002' and not self.code_review_rejected:
-            self.code_review_rejected = True
-            report = {'verdict': 'REJECTED', 'criteria': [{'index': 0, 'status': 'REJECTED', 'evidence': 'Revisar texto', 'files': []}], 'issues': ['Revisar texto do rodapé']}
-        elif agent == 'security_reviewer':
-            report = approval(['package.json', 'src/App.tsx'], count=5)   # critérios próprios, quantidade diferente
-        else:   # code_reviewer e qa citam package.json como evidência de leitura
-            report = approval(['package.json', 'src/App.tsx'])
-        return Result(json.dumps(report), f'thread-{len(self.calls)}', 'turn-1', commands if agent == 'qa' else [])
-
-    def develop(self, task, workspace):
-        self.dev_rounds[task] += 1
-        round_ = self.dev_rounds[task]
-        if task == 'TASK-001' and round_ == 1:
-            edits = [{'path': 'src/styles.css', 'content': STYLES_BROKEN}]   # build quebra
-        elif task == 'TASK-001':
-            styles = Path(ROOT / 'templates/web-react/src/styles.css').read_text(encoding='utf-8')
-            edits = [{'path': 'src/styles.css', 'content': styles}, {'path': 'src/sections/Hero.tsx', 'content': HERO},
-                     {'path': 'src/sections/Hero.test.tsx', 'content': HERO_TEST}, {'path': 'src/App.tsx', 'content': APP_HERO_ONLY}]
-        elif round_ == 1:
-            edits = [{'path': 'src/sections/Footer.tsx', 'content': FOOTER}, {'path': 'src/sections/Footer.test.tsx', 'content': FOOTER_TEST},
-                     {'path': 'src/App.tsx', 'content': APP}]
+        elif agent == 'builder':
+            assert write == 'build', 'o Builder precisa trabalhar no modo build (escrita direta no sandbox)'
+            report = self.build(task, workspace, prompt)
+        elif agent == 'recovery':
+            report = {'diagnosis': 'O Builder repete a mesma entrega', 'action': 'retry_with_guidance',
+                      'guidance': 'GUIA-RECUPERACAO: ajuste o texto do rodapé e mantenha o teste.', 'question': ''}
+        elif agent == 'reviewer':
+            report = self.review(task)
         else:
-            edits = []   # correção sem nada a mudar
-        files = apply_edits(workspace, edits) if edits else []
-        return {'summary': f'{task} rodada {round_}', 'files': files, 'issues': []}
+            raise AssertionError(f'agente inesperado no fluxo 3.0: {agent}')
+        return Result(json.dumps(report), f'thread-{len(self.calls)}', 'turn-1', commands if agent == 'reviewer' else [])
+
+    def write(self, workspace, files):
+        for rel, content in files.items():
+            path = Path(workspace) / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding='utf-8')
+        return sorted(files)
+
+    def build(self, task, workspace, prompt):
+        self.rounds[task] += 1
+        round_ = self.rounds[task]
+        styles = (ROOT / 'templates/web-react/src/styles.css').read_text(encoding='utf-8')
+        good_hero = {'src/styles.css': styles, 'src/sections/Hero.tsx': HERO, 'src/sections/Hero.test.tsx': HERO_TEST, 'src/App.tsx': APP_HERO_ONLY}
+        if task == 'TASK-001' and round_ == 1:
+            files = self.write(workspace, {'src/styles.css': STYLES_BROKEN})   # build quebra
+        elif task == 'TASK-001' and round_ == 2:
+            self.saw['gates_feedback'] = 'italic.css' in prompt
+            pkg = Path(workspace) / 'package.json'
+            data = json.loads(pkg.read_text(encoding='utf-8'))
+            data['scripts']['test'] = 'exit 0'   # tenta burlar as verificações
+            files = self.write(workspace, {**good_hero, 'package.json': json.dumps(data, indent=2)})
+        elif task == 'TASK-001':
+            self.saw['locked_feedback'] = 'package.json' in prompt and 'locked_files_reverted' in prompt
+            files = self.write(workspace, good_hero)
+        elif round_ == 1:
+            files = self.write(workspace, {'src/sections/Footer.tsx': FOOTER, 'src/sections/Footer.test.tsx': FOOTER_TEST, 'src/App.tsx': APP})
+        else:
+            if 'reviewer_feedback' in prompt:
+                self.saw['reviewer_feedback'] = True
+            if 'GUIA-RECUPERACAO' in prompt:
+                self.saw['guidance'] = True
+            files = []   # nada a mudar
+        return {'summary': f'{task} rodada {round_}', 'files': files, 'checks': [], 'issues': []}
+
+    def review(self, task):
+        self.reviews[task] += 1
+        if task == 'TASK-002' and not self.saw['guidance']:   # rejeita até a Recuperação orientar
+            return {'verdict': 'REJECTED', 'criteria': [{'index': 0, 'status': 'REJECTED', 'evidence': 'Texto do rodapé', 'files': []}],
+                    'security': {'verdict': 'APPROVED', 'issues': []}, 'issues': ['Ajustar o texto do rodapé (src/sections/Footer.tsx)']}
+        return {**approval(['package.json', 'src/App.tsx']), 'security': {'verdict': 'APPROVED', 'issues': []}}
 
 
 @unittest.skipUnless(os.environ.get('EPICBYTE_REHEARSAL') == '1', 'Ensaio lento: EPICBYTE_REHEARSAL=1 ou scripts/rehearsal.py')
@@ -163,7 +186,7 @@ class WebMissionRehearsal(unittest.TestCase):
         base = Path(self.temp.name)
         self.agents = base / 'agents'
         self.agents.mkdir()
-        for name in ('solution_strategist', 'product_owner', 'architect', 'planner', 'developer', 'code_reviewer', 'qa', 'security_reviewer', 'supervisor'):
+        for name in ('analyst', 'builder', 'reviewer', 'recovery', 'supervisor', 'developer', 'qa'):
             real = (ROOT / 'agents' / f'{name}.md').read_text(encoding='utf-8')
             (self.agents / f'{name}.md').write_text(f'AGENT={name}\n\n{real}', encoding='utf-8')
         self.workspace = base / 'mission'
@@ -186,15 +209,26 @@ class WebMissionRehearsal(unittest.TestCase):
         WorkflowEngine(self.store, agents, self.agents, Limits(agent_timeout=600, mission_timeout=3600)).run('m')
 
         mission = self.store.mission('m')
-        blocked = self.events('TASK_BLOCKED') + self.events('MISSION_BLOCKED')
+        blocked = self.events('TASK_BLOCKED') + self.events('MISSION_BLOCKED') + self.events('TASK_ERROR')
         self.assertEqual(mission['state'], 'COMPLETED', f'bloqueios: {blocked}')
+
+        # fluxo 3.0: um Analista, Builder em modo build, Revisor único
+        used = {a for a, _, _ in agents.calls}
+        self.assertEqual(used, {'analyst', 'builder', 'reviewer', 'recovery', 'supervisor'})
+        self.assertEqual(sum(a == 'analyst' for a, _, _ in agents.calls), 1)
 
         failed = self.events('GATES_FAILED')
         self.assertEqual(failed and failed[0]['failed'], ['build'], 'o build quebrado precisa ser pego pelas verificações')
-        build_output = next(g['output'] for g in self.events('QUALITY_GATES')[0]['results'] if g['gate'] == 'build')
-        self.assertIn('italic.css', build_output, 'o Developer precisa receber a mensagem real do erro')
+        self.assertTrue(agents.saw['gates_feedback'], 'o Builder precisa receber a mensagem real do erro do build')
 
-        self.assertTrue(self.events('REVIEW_REJECTED'), 'a rejeição do Code Reviewer precisa gerar correção')
+        self.assertEqual(self.events('LOCKED_FILES_REVERTED')[0]['files'], ['package.json'])
+        self.assertNotIn('exit 0', (self.workspace / 'package.json').read_text(encoding='utf-8'))
+        self.assertTrue(agents.saw['locked_feedback'], 'o Builder precisa saber que o package.json foi desfeito')
+
+        self.assertTrue(agents.saw['reviewer_feedback'], 'o Builder precisa receber os apontamentos do Revisor')
+        self.assertEqual(self.events('RECOVERY_DECISION')[0]['action'], 'retry_with_guidance')
+        self.assertTrue(agents.saw['guidance'], 'o Builder precisa receber a orientação da Recuperação')
+
         self.assertEqual(len(self.events('TASK_COMMITTED')), 2)
         log = subprocess.run([GIT, '-C', str(self.workspace), 'log', '--format=%s'], capture_output=True, text=True).stdout
         self.assertIn('TASK-001', log)

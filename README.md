@@ -91,6 +91,15 @@ O host de navegador automatizado informou indisponibilidade. O controle nativo f
 
 Próximas validações: concluir o smoke real multimodal no host, inspecionar o layout visualmente e certificar o sandbox antes de uma missão de escrita. Evoluções de produto posteriores: edição das preferências já anexadas e revisão conversacional de requisitos, tratamento seguro de SVG, extração de PDF e pipeline de vídeo. A revisão estruturada atual é funcional, porém ainda exige JSON para alterações detalhadas de requisitos e design; respostas e decisões já podem ser registradas em linguagem natural.
 
+## Fluxo 3.0 (autônomo)
+
+Pedido do cliente → **Analista** (entende, melhora o pedido, avalia opções e melhorias, riscos, direção técnica/visual e planeja 3–6 tarefas) → para cada tarefa: **Builder** (escreve e testa direto no sandbox, sem rede, até passar) → **verificações do motor** (typecheck, lint, test, build, npm audit) → **Revisor** único (critérios, código e segurança) → commit → **Supervisor** no final.
+
+- Falhas de infraestrutura (tempo esgotado, resposta fora do formato) são repetidas automaticamente e não consomem tentativas.
+- O motor desfaz qualquer mudança do Builder em `package.json`/lockfile e devolve a tarefa.
+- Esgotadas as tentativas, o agente de **Recuperação** investiga e orienta o Builder; só escala para o operador quando a decisão é dele (pergunta destacada no Mission Control).
+- `python scripts/rehearsal.py`: ensaio de missão web completa com agentes simulados e verificações reais. Rode antes de qualquer missão real depois de mudar o motor.
+
 ## Interface (frontend/)
 
 React 19 + TypeScript + Vite, servida pelo backend em produção. Direção visual **Mission Control** (grafite, ciano, dark).
