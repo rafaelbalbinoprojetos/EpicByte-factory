@@ -9,7 +9,11 @@ Você trabalha num projeto **React 19 + TypeScript + Vite + Tailwind CSS 4**. O 
 - `gsap` (com `gsap/ScrollTrigger`): animações ligadas à rolagem e sequências
 - `lucide-react`: ícones
 - `clsx`, `tailwind-merge` (`cn` em `src/lib/cn.ts`) e `class-variance-authority` (variantes, ver `src/components/ui/button.tsx`)
-- `@fontsource-variable/inter` (outras fontes não estão instaladas; não importe do Google Fonts)
+- Fontes (já instaladas; não importe do Google Fonts):
+  - `@fontsource-variable/inter`: texto e interface
+  - `@fontsource-variable/cormorant-garamond`: serifa editorial elegante para títulos de impacto
+  - `@fontsource-variable/playfair-display`: serifa de alto contraste, alternativa para títulos
+  - Importe no `src/styles.css` (`@import "@fontsource-variable/cormorant-garamond";`) e registre no `@theme` (`--font-display: "Cormorant Garamond Variable", serif;`)
 - Testes: `vitest` + `@testing-library/react` + `@testing-library/jest-dom`
 
 **Proibido:** alterar `package.json`, `package-lock.json` ou `.npmrc`, ou importar pacotes que não estão acima. O motor recusa e a tarefa falha.
