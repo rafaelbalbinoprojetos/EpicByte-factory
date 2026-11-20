@@ -59,7 +59,7 @@ class ApiTests(unittest.TestCase):
     def test_arbitrary_workspace_and_limits_rejected(self):
         data=self.payload();data['workspace']='C:/outside'
         self.assertEqual(self.call('/api/missions',data,origin=self.origin)[0],409)
-        data=self.payload();data['limits']={'max_executions':101}
+        data=self.payload();data['limits']={'max_executions':201}
         self.assertEqual(self.call('/api/missions',data,origin=self.origin)[0],409)
     def test_creation_fails_closed_on_certification(self):
         data=self.payload();data['dry_run']=False

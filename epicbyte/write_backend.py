@@ -115,3 +115,17 @@ print("APPLIED")
     if result.returncode or result.stdout.strip() != 'APPLIED':
         raise SafetyError('Writer sandbox falhou: ' + result.stderr.strip())
     return [e['path'] for e in edits]
+
+
+def sandbox_exec(workspace, argv, timeout=300):
+    """Executa um comando do projeto no sandbox oficial: escrita só no workspace, sem rede."""
+    profile = '{filesystem={":root"="read",":workspace_roots"={"."="write",".git"="read",".codex"="read",".agents"="read",".aws"="read"}},network={enabled=false}}'
+    command = codex_command() + ['-c', 'permissions.epicbyte=' + profile, 'sandbox', '--include-managed-config',
+                                 '-P', 'epicbyte', '-C', str(workspace), '--', *argv]
+    process = subprocess.Popen(command, cwd=workspace, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, encoding='utf-8', errors='replace')
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
+    finally:
+        stop_process(process)

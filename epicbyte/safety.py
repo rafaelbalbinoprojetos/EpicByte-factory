@@ -24,6 +24,13 @@ class SafetyError(RuntimeError):
     pass
 
 
+# Gerados por ferramentas (instalação, build, testes): fora da impressão digital do workspace.
+GENERATED_DIRS = {'.git', '__pycache__', 'node_modules', 'dist', 'coverage', '.vite', 'test-results', 'playwright-report'}
+GENERATED_SUFFIXES = ('.tsbuildinfo',)
+# Só o motor mexe em dependências (a partir do template); o agente não troca pacote nem scripts das verificações.
+LOCKED_FILES = {'package.json', 'package-lock.json', '.npmrc', 'npm-shrinkwrap.json'}
+
+
 def within(root, path):
     root, path = Path(root).resolve(), Path(path).resolve()
     if not path.is_relative_to(root) or path == root:
@@ -37,6 +44,8 @@ def relative_file(root, name):
     parts = Path(name).parts
     if any(p.casefold() in ('.git', '.codex', '.agents', '.aws', '..') or p.endswith((' ', '.')) or p.upper().split('.')[0] in ('CON', 'NUL', 'PRN', 'AUX', 'COM1', 'LPT1') for p in parts):
         raise SafetyError('Caminho protegido')
+    if any(p.casefold() in GENERATED_DIRS for p in parts[:-1]) or parts[-1].casefold() in LOCKED_FILES:
+        raise SafetyError('Arquivo gerado ou de dependências: só o motor altera')
     return within(root, Path(root) / name)
 
 
@@ -62,12 +71,14 @@ def validate_git(workspace):
 def snapshot(root):
     result = {}
     for base, dirs, files in os.walk(root, followlinks=False):
-        dirs[:] = [d for d in dirs if d not in ('.git', '__pycache__')]
+        dirs[:] = [d for d in dirs if d not in GENERATED_DIRS]
         for directory in dirs:
             p = Path(base) / directory
             if p.is_symlink() or (hasattr(p, 'is_junction') and p.is_junction()):
                 raise SafetyError('Link/junction no workspace')
         for name in files:
+            if name.endswith(GENERATED_SUFFIXES):
+                continue
             original = Path(base) / name
             if original.stat().st_nlink != 1:
                 raise SafetyError('Hardlink no workspace')

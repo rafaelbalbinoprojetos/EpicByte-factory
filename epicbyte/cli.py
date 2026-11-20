@@ -32,7 +32,7 @@ def mission_input(root, source):
     return path, text
 
 
-def create_mission(store, root, source, plan=None):
+def create_mission(store, root, source, plan=None, template=None, assets=None):
     _, text = mission_input(root, source)
     ident = 'mission_' + uuid.uuid4().hex[:12]
     workspaces = within(root, root / 'workspaces')
@@ -40,6 +40,19 @@ def create_mission(store, root, source, plan=None):
     workspace.mkdir(parents=True, exist_ok=False)
     subprocess.run([GIT, 'init', '-b', 'develop', str(workspace)], check=True, capture_output=True, timeout=15)
     validate_git(workspace)
+    if template:
+        from .web import prepare_workspace
+        try:
+            prepare_workspace(workspace, template)
+            if assets:
+                from .web import commit_task, copy_assets
+                used = copy_assets(workspace, assets, root)
+                lines = [f"- {u.get('webp', u['path'])} ({u.get('webp_size', [u.get('width'), u.get('height')])[0]}x{u.get('webp_size', [u.get('width'), u.get('height')])[1]}, otimizada; original {u['path']}: {u['original']})" for u in used]
+                text = '\n'.join([text, '', 'Imagens fornecidas pelo cliente (já em public/assets/):', *lines])
+                commit_task(workspace, 'Imagens fornecidas pelo cliente')
+        except Exception:
+            shutil.rmtree(workspace, ignore_errors=True)
+            raise
     store.create(ident, text, workspace)
     if plan is not None:
         store.save_plan(ident, plan)

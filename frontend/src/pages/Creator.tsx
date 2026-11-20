@@ -17,8 +17,11 @@ const missionSchema = z.object({
   criteria: z.string().trim().min(1, 'Inclua ao menos um critério'),
   constraints: z.string(),
   workspace: z.string().min(1),
-  max_executions: z.coerce.number().int().min(1).max(100),
-  mission_timeout: z.coerce.number().int().min(1).max(3600),
+  template: z.string(),
+  assets: z.array(z.string()),
+  max_executions: z.coerce.number().int().min(1).max(200),
+  mission_timeout: z.coerce.number().int().min(1).max(14400),
+  agent_timeout: z.coerce.number().int().min(60).max(900),
   dry_run: z.boolean(),
 });
 type MissionForm = z.input<typeof missionSchema>;
@@ -30,16 +33,19 @@ function FieldError({message}: {message?: string}) {
 function LegacyCreator() {
   const {data, busy, operate, setModal} = useFactory();
   const navigate = useNavigate();
-  const {register, handleSubmit, formState: {errors}} = useForm<MissionForm>({
+  const {register, handleSubmit, watch, setValue, formState: {errors}} = useForm<MissionForm>({
     resolver: zodResolver(missionSchema),
-    defaultValues: {name: '', description: '', criteria: '', constraints: '', workspace: data?.workspaces[0]?.id ?? 'managed', max_executions: 100, mission_timeout: 3600, dry_run: true},
+    defaultValues: {name: '', description: '', criteria: '', constraints: '', workspace: data?.workspaces[0]?.id ?? 'managed', template: '', assets: [], max_executions: 100, mission_timeout: 3600, agent_timeout: 180, dry_run: true},
   });
+  const template = watch('template');
+  const isWeb = !!template;
 
   const submit = handleSubmit(async values => {
     const v = missionSchema.parse(values);
     const result = await operate('missions', {
       name: v.name, description: v.description, criteria: v.criteria, constraints: v.constraints, workspace: v.workspace, dry_run: v.dry_run,
-      limits: {max_executions: v.max_executions, mission_timeout: v.mission_timeout},
+      ...(v.template ? {template: v.template, assets: v.assets} : {}),
+      limits: {max_executions: v.max_executions, mission_timeout: v.mission_timeout, agent_timeout: v.agent_timeout},
     });
     if (result?.dry_run) setModal({title: 'Dry-run validado', value: result});
     else if (typeof result?.id === 'string') navigate(`/missoes/${result.id}`);
@@ -57,12 +63,35 @@ function LegacyCreator() {
             <label>Descrição detalhada<textarea {...register('description')} rows={4} placeholder="Descreva o objetivo e as entregas esperadas." /><FieldError message={errors.description?.message} /></label>
             <label>Critérios de aceite<textarea {...register('criteria')} rows={3} placeholder="Um critério verificável por linha." /><FieldError message={errors.criteria?.message} /></label>
             <label>Restrições técnicas<textarea {...register('constraints')} rows={2} placeholder="Tecnologias, limites e restrições." /></label>
+            <label>Tipo de projeto
+              <select
+                {...register('template')}
+                onChange={e => {
+                  setValue('template', e.target.value);
+                  if (e.target.value) { setValue('agent_timeout', 600); setValue('max_executions', 150); setValue('mission_timeout', 10800); }
+                }}
+              >
+                <option value="">Python (utilitário, script, biblioteca)</option>
+                {data?.templates?.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+            </label>
+            {isWeb && (
+              <fieldset className="m-0 rounded-md border border-line-input p-4">
+                <legend className="px-1 text-[12px] text-ink-soft">Imagens do cliente (pasta images/)</legend>
+                {data?.assets?.length ? (
+                  <div className="flex flex-col gap-2">
+                    {data.assets.map(a => <label key={a} className="flex-row items-center gap-2"><input type="checkbox" value={a} {...register('assets')} />{a}</label>)}
+                  </div>
+                ) : <p className="m-0 text-[12px] text-ink-muted">Coloque PNG, JPG ou WebP em images/ na raiz da fábrica.</p>}
+              </fieldset>
+            )}
             <label>Workspace autorizado
               <select {...register('workspace')}>{data?.workspaces.map(w => <option value={w.id} key={w.id}>{w.label}</option>)}</select>
             </label>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <label>Limite de execuções<input type="number" min={1} max={100} {...register('max_executions')} /><FieldError message={errors.max_executions?.message} /></label>
-              <label>Duração máxima (segundos)<input type="number" min={1} max={3600} {...register('mission_timeout')} /><FieldError message={errors.mission_timeout?.message} /></label>
+            <div className="grid gap-5 sm:grid-cols-3">
+              <label>Limite de execuções<input type="number" min={1} max={200} {...register('max_executions')} /><FieldError message={errors.max_executions?.message} /></label>
+              <label>Duração máxima (segundos)<input type="number" min={1} max={14400} {...register('mission_timeout')} /><FieldError message={errors.mission_timeout?.message} /></label>
+              <label>Tempo por agente (segundos)<input type="number" min={60} max={900} {...register('agent_timeout')} /><FieldError message={errors.agent_timeout?.message} /></label>
             </div>
             <label className="flex-row items-center gap-2"><input type="checkbox" {...register('dry_run')} />Dry-run: validar sem criar workspace ou chamar agentes</label>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#25364b] pt-5">

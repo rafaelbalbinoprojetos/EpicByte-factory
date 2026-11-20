@@ -1,4 +1,4 @@
-import {Clock3, FileCheck2, Layers3, Pause, Play, Terminal, Users} from 'lucide-react';
+import {CheckCircle2, Clock3, ExternalLink, FileCheck2, Layers3, Pause, Play, ShieldCheck, Terminal, Users, XCircle} from 'lucide-react';
 import {useNavigate, useParams} from 'react-router-dom';
 import {PageHeading} from '@/components/layout/AppShell';
 import {NewMissionButton} from '@/pages/Dashboard';
@@ -7,7 +7,7 @@ import {Button} from '@/components/ui/button';
 import {Empty, JsonView, Panel, SectionHeading} from '@/components/ui/panel';
 import {useFactory} from '@/hooks/useFactory';
 import {AGENT_LABELS, agentLabel, dateTime, duration, elapsed, progress, taskSpec, title} from '@/lib/format';
-import type {FactoryState, Mission} from '@/lib/types';
+import type {FactoryState, GateResult, Mission} from '@/lib/types';
 import {cn} from '@/lib/cn';
 
 function stageState(data: FactoryState, mission: Mission, agent: string) {
@@ -17,8 +17,49 @@ function stageState(data: FactoryState, mission: Mission, agent: string) {
   return null;
 }
 
+function QualityGates({data, mission}: {data: FactoryState; mission: Mission}) {
+  const {setModal} = useFactory();
+  const last = data.events.find(e => e.mission === mission.id && e.type === 'QUALITY_GATES');
+  if (!last) return null;
+  let gates: {passed: boolean; results: GateResult[]};
+  try {
+    gates = JSON.parse(last.data);
+  } catch {
+    return null;
+  }
+  return (
+    <Panel className="mb-6">
+      <SectionHeading
+        icon={<ShieldCheck size={18} />}
+        title="Verificações de qualidade"
+        aside={<span className="font-mono text-[11px]">{last.task} · {dateTime(last.timestamp)}</span>}
+      />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {gates.results.map(g => (
+          <button
+            key={g.gate}
+            type="button"
+            onClick={() => setModal({title: `Verificação ${g.gate} · código ${g.exit_code}`, value: g.output})}
+            className={cn('flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2.5 text-left text-[12px]', g.passed ? 'border-ok-line bg-ok-bg text-ok' : 'border-warn-line bg-warn-bg text-warn')}
+          >
+            {g.passed ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+            <span className="font-medium">{g.gate}</span>
+            <span className="ml-auto font-mono text-[10px] opacity-80">{g.duration}s</span>
+          </button>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 function MissionDetail({data, mission}: {data: FactoryState; mission: Mission}) {
   const {busy, operate, setModal} = useFactory();
+  const isWeb = !!data.web_missions?.includes(mission.id);
+  const built = data.events.some(e => e.mission === mission.id && e.type === 'QUALITY_GATES' && /"gate": "build", "exit_code": 0/.test(e.data));
+  async function openSite() {
+    const result = await operate(`missions/${mission.id}/preview`);
+    if (typeof result?.url === 'string') window.open(result.url, '_blank', 'noopener');
+  }
   return (
     <>
       <Panel className="my-5 flex flex-wrap items-center justify-between gap-4">
@@ -37,6 +78,11 @@ function MissionDetail({data, mission}: {data: FactoryState; mission: Mission}) 
           <Button variant="secondary" disabled={busy || !['PAUSED', 'BLOCKED', 'FAILED'].includes(mission.state)} onClick={() => operate(`missions/${mission.id}/resume`)}>
             <Play size={15} />Retomar
           </Button>
+          {isWeb && (
+            <Button variant="secondary" disabled={busy || !built} title={built ? 'Abre o build atual numa porta própria' : 'Disponível depois do primeiro build aprovado nas verificações'} onClick={openSite}>
+              <ExternalLink size={15} />Abrir site
+            </Button>
+          )}
         </div>
       </Panel>
 
@@ -79,6 +125,7 @@ function MissionDetail({data, mission}: {data: FactoryState; mission: Mission}) 
         </details>
       </Panel>
 
+      <QualityGates data={data} mission={mission} />
       <SectionHeading icon={<Layers3 size={18} />} title="Pipeline de execução" aside="Dependências validadas pelo Python" />
       {mission.tasks.length ? (
         <div className="mb-7 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">

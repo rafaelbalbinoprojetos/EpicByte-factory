@@ -9,6 +9,7 @@ from .model import validate_plan, validate_approved_tasks
 from .provider import ProviderError, ProviderUnavailable
 from .safety import IsolationPolicy, SafetyError, snapshot, relative_file, within
 from .storage import now
+from .web import commit_task, is_web, run_gates
 
 
 @dataclass
@@ -209,6 +210,13 @@ class WorkflowEngine:
             previous = [dict(r) for r in store.db.execute('SELECT agent,report,status FROM executions WHERE mission=? AND task=? ORDER BY id DESC LIMIT 8', (mission, ident))]
             context = {'mission': store.mission(mission)['source'], 'task': spec, 'previous': previous,
                        'workspace': str(workspace), 'contract': {'summary': 'string', 'files': ['relative path'], 'issues': ['string']}}
+            web = is_web(workspace)
+            if web:
+                last = store.db.execute("SELECT data FROM events WHERE mission=? AND task=? AND type='QUALITY_GATES' ORDER BY seq DESC LIMIT 1", (mission, ident)).fetchone()
+                context['project'] = ('Projeto web do template web-react (leia AGENTS.md). Dependências e package.json são travados. '
+                                      'O motor roda typecheck, lint, test, build e npm audit depois da sua entrega; tudo precisa passar.')
+                if last:
+                    context['last_quality_gates'] = json.loads(last[0])
             try:
                 developer, dev_result = self.call(mission, spec['agent'], context, ident, write)
             finally:
@@ -220,9 +228,23 @@ class WorkflowEngine:
             self.record_evidence(mission, ident, 'developer', dev_result)
             if not write and before != after:
                 raise SafetyError('Read-only agent modified workspace')
+            gates = None
+            if web and write:
+                self.isolation.require_write(workspace)
+                gates = run_gates(workspace)
+                with store.db:
+                    store.event(mission, 'QUALITY_GATES', ident, **gates)
+                if snapshot(workspace) != after:
+                    raise SafetyError('Verificações alteraram arquivos-fonte do workspace')
+                if not gates['passed']:
+                    with store.db:
+                        store.event(mission, 'GATES_FAILED', ident, failed=[g['gate'] for g in gates['results'] if not g['passed']])
+                    return self.fix(mission, ident)
             store.transition(mission, 'REVIEW', ident)
             contract = {'verdict': 'APPROVED|REJECTED|BLOCKED', 'criteria': [{'index': 0, 'status': 'APPROVED|REJECTED|BLOCKED', 'evidence': 'string', 'files': []}], 'issues': ['string']}
             context = {**context, 'developer': developer, 'diff': diff, 'contract': contract}
+            if gates:
+                context['quality_gates'] = gates
             independent_threads = {dev_result.thread}
             for agent in ('code_reviewer',):
                 report, result = self.call(mission, agent, context, ident)
@@ -258,6 +280,14 @@ class WorkflowEngine:
             store.transition(mission, 'APPROVED', ident)
             with store.db:
                 store.event(mission, 'TASK_APPROVED', ident, snapshot=after)
+            try:   # a aprovação já vale; falha de commit vira evento, não bloqueia
+                commit = commit_task(workspace, f"{ident}: {spec.get('description', '')}")
+                if commit:
+                    with store.db:
+                        store.event(mission, 'TASK_COMMITTED', ident, commit=commit)
+            except Exception as error:
+                with store.db:
+                    store.event(mission, 'COMMIT_SKIPPED', ident, reason=str(error)[:300])
         except ProviderUnavailable:
             if next(t for t in store.tasks(mission) if t['id'] == ident)['state'] in ('RUNNING', 'REVIEW', 'TESTING'):
                 store.transition(mission, 'FIX_REQUIRED', ident)

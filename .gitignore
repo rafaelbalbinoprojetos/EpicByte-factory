@@ -11,3 +11,6 @@ logs/
 frontend/*.tsbuildinfo
 .env*
 cookies.txt
+templates/*/node_modules/
+templates/*/dist/
+images/

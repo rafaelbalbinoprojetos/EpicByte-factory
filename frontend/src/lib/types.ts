@@ -44,4 +44,9 @@ export type FactoryState = {
   workspaces: {id: string; label: string}[];
   limits: Record<string, number>;
   versions: Record<string, string>;
+  templates?: {id: string; label: string}[];
+  assets?: string[];
+  web_missions?: string[];
 };
+
+export type GateResult = {gate: string; exit_code: number; passed: boolean; duration: number; output: string};

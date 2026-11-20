@@ -3,6 +3,7 @@ import os
 import hmac
 import sqlite3
 from .studio import Studio, capabilities
+from .web import AVAILABLE as TEMPLATES, available_assets, is_web, start_preview
 import json
 import secrets
 import subprocess
@@ -16,6 +17,10 @@ from .storage import Store, clean, now
 from .model import AGENTS
 from .cli import status, create_mission
 from .safety import within, IsolationPolicy
+
+
+# Projetos web precisam de mais tempo: um Developer escreve vários componentes por tarefa.
+LIMIT_CAPS = {'max_executions': 200, 'mission_timeout': 14400, 'agent_timeout': 900}
 
 
 def fixed_password(root):
@@ -105,7 +110,7 @@ def make_server(db, root, port=8780):
                     studio = Studio(store, root, initialize=False)
                     briefs = [studio.get(r[0]) for r in store.db.execute('SELECT id FROM briefs ORDER BY created DESC LIMIT 100')]
                     agents = [{'name': a, 'responsibilities': (root / 'agents' / (a + '.md')).read_text(encoding='utf-8')} for a in AGENTS]
-                    return self.reply(dict(missions=missions, executions=executions, events=events, evidence=evidence, agents=agents, diagnostic=diagnostic, workspaces=[{'id': 'managed', 'label': 'Workspace novo isolado / develop'}], briefs=briefs, capabilities=capabilities(), discovery_runs=[dict(r) for r in store.db.execute('SELECT * FROM discovery_runs ORDER BY id DESC LIMIT 300')], versions={'factory':'2.1', 'python':sys.version.split()[0]}, limits={'max_executions':100,'mission_timeout':3600,'agent_timeout':180}))
+                    return self.reply(dict(missions=missions, executions=executions, events=events, evidence=evidence, agents=agents, diagnostic=diagnostic, workspaces=[{'id': 'managed', 'label': 'Workspace novo isolado / develop'}], briefs=briefs, capabilities=capabilities(), discovery_runs=[dict(r) for r in store.db.execute('SELECT * FROM discovery_runs ORDER BY id DESC LIMIT 300')], versions={'factory':'2.1', 'python':sys.version.split()[0]}, limits=LIMIT_CAPS, templates=[{'id':k,'label':v} for k,v in TEMPLATES.items()], assets=available_assets(root), web_missions=[m['id'] for m in missions if is_web(m['workspace'])]))
                 if path == '/api/capabilities': return self.reply(capabilities(probe=True))
                 parts = path.strip('/').split('/')
                 if len(parts) >= 3 and parts[:2] == ['api','briefs']:
@@ -198,9 +203,14 @@ def make_server(db, root, port=8780):
                     if type(data.get('dry_run', False)) is not bool: raise ValueError('dry_run deve ser booleano')
                     if not isinstance(data.get('constraints', ''), str) or len(data.get('constraints', '')) > 30000: raise ValueError('Restrições inválidas')
                     limits = data.get('limits', {})
-                    if not isinstance(limits, dict) or set(limits) - {'mission_timeout','max_executions'}: raise ValueError('Limites inválidos')
+                    if not isinstance(limits, dict) or set(limits) - set(LIMIT_CAPS): raise ValueError('Limites inválidos')
                     for key, value in limits.items():
-                        if type(value) is not int or not 1 <= value <= {'mission_timeout':3600,'max_executions':100}[key]: raise ValueError('Limite excedido')
+                        if type(value) is not int or not 1 <= value <= LIMIT_CAPS[key]: raise ValueError('Limite excedido')
+                    template = data.get('template') or None
+                    if template is not None and template not in TEMPLATES: raise ValueError('Tipo de projeto inválido')
+                    assets = data.get('assets') or []
+                    if not isinstance(assets, list) or len(assets) > 20 or any(not isinstance(a, str) for a in assets): raise ValueError('Imagens inválidas')
+                    if assets and not template: raise ValueError('Imagens só em projetos web')
                     source = f"# {data['name']}\n\n{data['description']}\n\nCritérios de aceite:\n{data['criteria']}\n\nRestrições:\n{data.get('constraints','')}"
                     if data.get('dry_run') is True: return self.reply({'dry_run':True,'characters':len(source),'message':'Validado sem criar workspace nem chamar provedor'})
                     if data.get('brief_id'):
@@ -213,7 +223,7 @@ def make_server(db, root, port=8780):
                     incoming.mkdir(parents=True,exist_ok=True)
                     file = incoming / (secrets.token_hex(12)+'.md')
                     file.write_text(source,encoding='utf-8')
-                    ident = create_mission(store,root,file.relative_to(root))
+                    ident = create_mission(store,root,file.relative_to(root),template=template,assets=assets)
                     with store.db:
                         store.db.execute('INSERT INTO mission_limits VALUES(?,?)',(ident,json.dumps(limits)))
                         if data.get('brief_id'):
@@ -230,6 +240,10 @@ def make_server(db, root, port=8780):
                         store.db.execute('UPDATE missions SET pause=1 WHERE id=?',(ident,)); store.event(ident,'PAUSE_REQUESTED')
                     if not store.db.execute('SELECT 1 FROM locks WHERE mission=?',(ident,)).fetchone() and mission['state'] != 'PAUSED': store.transition(ident,'PAUSED')
                     return self.reply({'pause_requested':ident})
+                if action == 'preview':
+                    workspace = within(within(root, root / 'workspaces'), Path(mission['workspace']))
+                    if not is_web(workspace): raise ValueError('Missão sem projeto web')
+                    return self.reply({'url': start_preview(ident, workspace)})
                 if action not in ('start','resume'): raise ValueError('Operação desconhecida')
                 if mission['state'] not in (('CREATED',) if action == 'start' else ('PAUSED','BLOCKED','FAILED')): raise ValueError('Estado não permite operação')
                 IsolationPolicy().require_write(within(within(root, root / 'workspaces'), Path(mission['workspace'])))
