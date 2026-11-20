@@ -176,6 +176,12 @@ class WorkflowTests(Base):
         self.assertTrue(any('— architect' in p for p in provider.calls))
         self.assertTrue(any('— planner' in p for p in provider.calls))
 
+    def test_direct_mission_is_explicitly_approved_for_planning(self):
+        provider = MockProvider()
+        self.engine(provider).run('m')
+        planning = [c for c in provider.calls if any(r in c for r in ('— solution_strategist', '— product_owner', '— planner'))]
+        self.assertTrue(planning and all('APROVADO PELO OPERADOR' in c for c in planning))
+
     def test_correction_then_approval(self):
         self.store.save_plan('m', plan())
         self.engine(MockProvider(reject=1)).run('m')

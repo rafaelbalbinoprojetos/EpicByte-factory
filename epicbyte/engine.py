@@ -12,6 +12,13 @@ from .storage import now
 from .web import commit_task, is_web, run_gates
 
 
+# Missão escrita pelo operador no formulário técnico: o texto inteiro é o escopo aprovado.
+DIRECT_AUTHORIZATION = ('APROVADO PELO OPERADOR: esta missão foi escrita e criada diretamente pelo operador. Todo o conteúdo da missão '
+                        '(descrição, critérios de aceite e restrições) está APPROVED para implementação nesta execução. Não exija outra '
+                        'aprovação. O plano deve conter tarefas de implementação (agent developer, mode write) que entreguem tudo o que a missão pede. '
+                        'Somente recomendações extras, que não estão no texto da missão, continuam fora do escopo.')
+
+
 @dataclass
 class Limits:
     max_executions: int = 100
@@ -142,6 +149,10 @@ class WorkflowEngine:
                 if m['state'] != 'PLANNING':
                     store.transition(mission, 'PLANNING')
                 context = {'mission': m['source'], 'contract': {'summary': 'string', 'acceptance_criteria': ['string']}}
+                has_brief = bool(store.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='briefs'").fetchone()
+                                 and store.db.execute('SELECT 1 FROM briefs WHERE mission=?', (mission,)).fetchone())
+                if not has_brief:
+                    context['authorization'] = DIRECT_AUTHORIZATION
                 strategy, _ = self.call(mission, 'solution_strategist', {**context, 'scope_policy':'A missão contém o único escopo autorizado. Recomendações são somente informativas e não podem entrar no plano.'})
                 product, _ = self.call(mission, 'product_owner', {**context, 'strategy': strategy, 'scope_policy':'Use somente a missão aprovada; exclua recomendações não autorizadas.'})
                 architecture, _ = self.call(mission, 'architect', {**context, 'product': product})
@@ -155,6 +166,8 @@ class WorkflowEngine:
                 plan, _ = self.call(mission, 'planner', {**context, 'product': product, 'architecture': architecture,
                     'contract': {'tasks': [{'id': 'TASK-001', 'agent': 'developer|qa', 'mode': 'write|read-only', 'description': 'string', 'acceptance_criteria': ['string'], 'dependencies': []}]}})
                 if approved_ids is not None: validate_approved_tasks(plan, approved_ids)
+                if not has_brief and is_web(m['workspace']) and not any(isinstance(t, dict) and t.get('agent') == 'developer' and t.get('mode', 'write') == 'write' for t in plan.get('tasks', [])):
+                    raise ProviderError('Plano sem nenhuma tarefa de implementação para uma missão aprovada pelo operador')
                 store.save_plan(mission, validate_plan(plan))
             if store.mission(mission)['state'] != 'RUNNING':
                 store.transition(mission, 'RUNNING')
