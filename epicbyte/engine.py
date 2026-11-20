@@ -71,11 +71,25 @@ def audit_approved(report, spec, workspace):
     return True
 
 
-def test_evidence(result):
-    # These come from App Server item/completed notifications, never the agent's prose.
-    return bool(result.commands) and all(c.get('status') == 'completed' and c.get('exitCode') == 0
-                                         and isinstance(c.get('command'), str) and c['command'].strip()
-                                         for c in result.commands)
+def test_evidence(result, report=None):
+    """Comandos vêm das notificações do App Server, nunca do texto do agente.
+
+    Exige ao menos um comando concluído com código 0. Um comando que falhou só é tolerado
+    se o QA o declarou em `fora_do_escopo` (ex.: teste global de uma tarefa futura), com motivo;
+    sem essa declaração explícita, qualquer falha reprova a tarefa."""
+    commands = result.commands or []
+    if not commands or not all(isinstance(c.get('command'), str) and c['command'].strip() for c in commands):
+        return False
+    ok = [c for c in commands if c.get('status') == 'completed' and c.get('exitCode') == 0]
+    if not ok:
+        return False
+    declared = (report or {}).get('fora_do_escopo') or []
+    if not isinstance(declared, list):
+        return False
+    marks = [str(d.get('comando') if isinstance(d, dict) else d).strip() for d in declared
+             if (not isinstance(d, dict) or str(d.get('motivo') or '').strip())]
+    marks = [m for m in marks if len(m) >= 6]
+    return all(any(m in c['command'] for m in marks) for c in commands if c not in ok)
 
 
 class WorkflowEngine:
@@ -222,7 +236,7 @@ class WorkflowEngine:
                 self.record_evidence(mission, ident, agent, result)
             store.transition(mission, 'TESTING', ident)
             report, result = self.call(mission, 'qa', {**context, 'requirement': 'Execute testes reais; registre comandos via ferramentas; declarações não são evidência.'}, ident)
-            approved = result.thread not in independent_threads and audit_approved(report, spec, workspace) and test_evidence(result)
+            approved = result.thread not in independent_threads and audit_approved(report, spec, workspace) and test_evidence(result, report)
             with store.db:
                 store.event(mission, 'TESTS_PASSED' if approved else 'TESTS_FAILED', ident, report=report, commands=result.commands)
             if snapshot(workspace) != after:

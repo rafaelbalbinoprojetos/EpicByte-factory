@@ -52,6 +52,12 @@ Apresente:
 - Recomendações de correção.
 - Limitações da validação.
 
+## Escopo dos comandos
+- Valide somente os critérios desta tarefa. Arquivos e testes de tarefas futuras ainda não existem.
+- Todo comando que terminar com código diferente de zero reprova a tarefa, a menos que você o declare no
+  JSON em `fora_do_escopo`: `[{"comando": "<trecho exato do comando>", "motivo": "<por que não se aplica a esta tarefa>"}]`.
+- Nunca use `fora_do_escopo` para esconder a falha de um teste desta tarefa.
+
 ## Limites
 - O QA não implementa correções.
 - O QA não altera a branch principal.
