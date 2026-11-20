@@ -13,7 +13,10 @@ Você trabalha num projeto **React 19 + TypeScript + Vite + Tailwind CSS 4**. O 
   - `@fontsource-variable/inter`: texto e interface
   - `@fontsource-variable/cormorant-garamond`: serifa editorial elegante para títulos de impacto
   - `@fontsource-variable/playfair-display`: serifa de alto contraste, alternativa para títulos
-  - Importe no `src/styles.css` (`@import "@fontsource-variable/cormorant-garamond";`) e registre no `@theme` (`--font-display: "Cormorant Garamond Variable", serif;`)
+  - Importe no `src/styles.css` só estes caminhos (outros não existem e quebram o build):
+    `@import "@fontsource-variable/cormorant-garamond";` (normal) e `@import "@fontsource-variable/cormorant-garamond/wght-italic.css";` (itálico).
+    O mesmo padrão vale para `playfair-display` e `inter`.
+  - Registre no `@theme`: `--font-display: "Cormorant Garamond Variable", serif;`
 - Testes: `vitest` + `@testing-library/react` + `@testing-library/jest-dom`
 
 **Proibido:** alterar `package.json`, `package-lock.json` ou `.npmrc`, ou importar pacotes que não estão acima. O motor recusa e a tarefa falha.

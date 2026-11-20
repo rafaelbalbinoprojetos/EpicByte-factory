@@ -55,8 +55,17 @@ def install(workspace):
         raise SafetyError('npm ci falhou: ' + (result.stderr or result.stdout)[-1500:])
 
 
-def _tail(text, lines=40):
-    return '\n'.join((text or '').strip().splitlines()[-lines:])
+def _tail(text, lines=60):
+    """Saída útil para o Developer: sem cores ANSI e sem linhas de pilha ("at ..."), começando pela
+    primeira linha de erro (a mensagem real vem antes da pilha, que é longa)."""
+    import re
+    clean = [re.sub(r'\x1b\[[0-9;]*m', '', line).rstrip() for line in (text or '').splitlines()]
+    clean = [line for line in clean if line.strip() and not line.lstrip().startswith('at ') and 'Unknown global config' not in line]
+    errors = [i for i, line in enumerate(clean) if re.search(r'error|failed|✗|×', line, re.I)]
+    if errors:
+        start = max(0, errors[0] - 3)
+        return '\n'.join(clean[start:start + lines])
+    return '\n'.join(clean[-lines:])
 
 
 def run_gates(workspace, timeout=300):
