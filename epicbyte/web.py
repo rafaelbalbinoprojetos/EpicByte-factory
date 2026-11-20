@@ -200,3 +200,39 @@ def start_preview(mission, workspace):
         url = f'http://127.0.0.1:{server.server_address[1]}/'
         _previews[mission] = (server, url)
         return url
+
+
+# ── Verificação visual: o motor abre o build num navegador sem interface (só 127.0.0.1) ──
+VISUAL_TOOL = ROOT / 'tools' / 'visual' / 'check.mjs'
+
+
+def visual_available():
+    return VISUAL_TOOL.is_file() and (VISUAL_TOOL.parent / 'node_modules' / 'playwright').is_dir()
+
+
+def run_visual(workspace, out_dir, timeout=240):
+    """Larguras 360/768/1280/1920, rolagem horizontal, imagens, console, recursos 404, acessibilidade (axe),
+    foco no teclado e prefers-reduced-motion. Requisições para fora de 127.0.0.1 são bloqueadas."""
+    dist = Path(workspace) / 'dist'
+    if not (dist / 'index.html').is_file():
+        return {'passed': False, 'problems': ['Não há build em dist/ para verificar'], 'skipped': False}
+    if not visual_available():
+        return {'passed': True, 'skipped': True, 'problems': [], 'reason': 'Ferramenta visual não instalada (tools/visual)'}
+    server = ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(_Quiet, directory=str(dist)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f'http://127.0.0.1:{server.server_address[1]}/'
+        node = shutil.which('node') or str(Path(os.environ.get('ProgramFiles', r'C:\Program Files')) / 'nodejs' / 'node.exe')
+        proc = subprocess.run([node, str(VISUAL_TOOL), url, str(out_dir)], cwd=VISUAL_TOOL.parent, capture_output=True,
+                              text=True, encoding='utf-8', errors='replace', timeout=timeout)
+        try:
+            result = json.loads(proc.stdout.strip().splitlines()[-1])
+        except (IndexError, json.JSONDecodeError):
+            return {'passed': False, 'skipped': False, 'problems': ['Verificação visual não concluiu: ' + _tail(proc.stderr or proc.stdout, 15)]}
+        result['skipped'] = False
+        return result
+    except subprocess.TimeoutExpired:
+        return {'passed': False, 'skipped': False, 'problems': [f'Verificação visual excedeu {timeout}s']}
+    finally:
+        server.shutdown()
+        server.server_close()

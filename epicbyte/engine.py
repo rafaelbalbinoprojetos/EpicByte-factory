@@ -9,7 +9,7 @@ from .model import validate_plan, validate_approved_tasks
 from .provider import ProviderError, ProviderUnavailable
 from .safety import IsolationPolicy, SafetyError, snapshot, relative_file, within
 from .storage import now
-from .web import commit_task, is_web, run_gates
+from .web import commit_task, is_web, run_gates, run_visual
 
 
 # Missão escrita pelo operador no formulário técnico: o texto inteiro é o escopo aprovado.
@@ -318,11 +318,20 @@ class WorkflowEngine:
                     with store.db:
                         store.event(mission, 'GATES_FAILED', ident, failed=[g['gate'] for g in gates['results'] if not g['passed']])
                     return self.fix(mission, ident)
+                attempt = next(t['attempts'] for t in store.tasks(mission) if t['id'] == ident)
+                visual = run_visual(workspace, self.executor.agents_dir.parent / '.factory' / 'evidence' / mission / ident / f'tentativa-{attempt}')
+                with store.db:
+                    store.event(mission, 'VISUAL_CHECK', ident, **visual)
+                if not visual.get('passed'):
+                    with store.db:
+                        store.event(mission, 'VISUAL_FAILED', ident, problems=visual.get('problems'))
+                    return self.fix(mission, ident)
             store.transition(mission, 'REVIEW', ident)
             review_context = {**context, 'builder': developer, 'diff': diff, 'contract': REVIEWER_CONTRACT}
             review_context.pop('reviewer_feedback', None)
             if gates:
                 review_context['quality_gates'] = gates
+                review_context['visual_evidence'] = self.latest(mission, ident, 'VISUAL_CHECK')
             report, result = self.call_retry(mission, 'reviewer', review_context, ident)
             if result.thread == dev_result.thread:
                 raise ProviderError('Revisão deve usar sessão independente')
@@ -378,7 +387,9 @@ class WorkflowEngine:
         rejected = self.latest(mission, task, 'REVIEW_REJECTED')
         guidance = self.latest(mission, task, 'RECOVERY_GUIDANCE')
         reverted = self.latest(mission, task, 'LOCKED_FILES_REVERTED')
+        visual = self.latest(mission, task, 'VISUAL_CHECK')
         return {
+            'visual_problems': visual.get('problems') if visual and not visual.get('passed') else None,
             'last_quality_gates': last_gates if last_gates and not last_gates.get('passed') else None,
             'reviewer_feedback': (rejected or {}).get('report', {}).get('issues') if rejected else None,
             'guidance': (guidance or {}).get('guidance'),

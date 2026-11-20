@@ -14,3 +14,4 @@ cookies.txt
 templates/*/node_modules/
 templates/*/dist/
 images/
+tools/*/node_modules/

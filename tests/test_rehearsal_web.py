@@ -229,6 +229,10 @@ class WebMissionRehearsal(unittest.TestCase):
         self.assertEqual(self.events('RECOVERY_DECISION')[0]['action'], 'retry_with_guidance')
         self.assertTrue(agents.saw['guidance'], 'o Builder precisa receber a orientação da Recuperação')
 
+        visual = self.events('VISUAL_CHECK')
+        self.assertTrue(visual and not visual[-1].get('skipped'), 'a verificação visual precisa rodar de verdade')
+        self.assertTrue(visual[-1]['passed'], f"verificação visual: {visual[-1].get('problems')}")
+        self.assertEqual([w['width'] for w in visual[-1]['widths']], [360, 768, 1280, 1920])
         self.assertEqual(len(self.events('TASK_COMMITTED')), 2)
         log = subprocess.run([GIT, '-C', str(self.workspace), 'log', '--format=%s'], capture_output=True, text=True).stdout
         self.assertIn('TASK-001', log)

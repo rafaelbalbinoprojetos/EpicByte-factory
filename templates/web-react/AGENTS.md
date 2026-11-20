@@ -27,6 +27,7 @@ Você trabalha num projeto **React 19 + TypeScript + Vite + Tailwind CSS 4**. O 
 - `src/components/ui/`: componentes reutilizáveis (botão, card, campo)
 - `src/content/site.ts`: **todo o texto e os dados** (nome, telefone, WhatsApp, itens de listas), sem texto espalhado nas seções
 - `src/styles.css`: tokens de design; ajuste o `@theme` para a identidade do projeto
+- `public/favicon.svg`: ícone da aba (troque pelo monograma do projeto)
 - `public/assets/`: imagens fornecidas (use `./assets/arquivo.png` no `src` das imagens)
 - Testes ao lado do código: `Nome.test.tsx`
 

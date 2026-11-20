@@ -14,7 +14,7 @@ Você é o **Analista de Produto e Arquiteto** da fábrica: recebe o pedido do c
 ## Regras do plano
 - Cada tarefa: `id` (TASK-001...), `agent` = `developer`, `mode` = `write`, `description` clara, `acceptance_criteria` verificáveis (3 a 8), `dependencies`.
 - A primeira tarefa monta a base (estrutura, tokens, conteúdo); as seguintes constroem sobre ela; a última integra e finaliza.
-- Critérios precisam ser checáveis por leitura de código ou por testes automatizados.
+- Critérios precisam ser checáveis por leitura de código, por testes automatizados ou pela verificação visual do motor (em sites: larguras de 360 a 1920px, acessibilidade axe, teclado, movimento reduzido, console e arquivos 404 são verificados automaticamente em toda tarefa).
 
 ## Autorização
 - Missão criada diretamente pelo operador (contexto `authorization` = APROVADO PELO OPERADOR): todo o texto da missão é aprovado; planeje tudo o que ela pede.
