@@ -19,7 +19,8 @@ class SafetyForWebTests(unittest.TestCase):
     def test_agents_cannot_touch_dependencies_or_generated_files(self):
         for name in ('package.json', 'package-lock.json', '.npmrc', 'node_modules/x/index.js', 'dist/index.html', 'sub/node_modules/a.js'):
             with self.assertRaises(SafetyError, msg=name):
-                relative_file(self.root, name)
+                relative_file(self.root, name, write=True)
+            relative_file(self.root, name)   # ler/citar como evidência continua permitido
         self.assertTrue(str(relative_file(self.root, 'src/App.tsx')).endswith('App.tsx'))
 
     def test_snapshot_ignores_generated_folders(self):
@@ -69,3 +70,25 @@ class GatesTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ReopenTests(unittest.TestCase):
+    def test_reopen_resets_blocked_tasks_only(self):
+        import json
+        from epicbyte.storage import Store
+        with tempfile.TemporaryDirectory() as d:
+            store = Store(str(Path(d) / 'db.sqlite3'))
+            store.create('m', '# missão', d)
+            spec = lambda i, deps: {'id': i, 'agent': 'developer', 'mode': 'write', 'description': i, 'acceptance_criteria': ['ok'], 'dependencies': deps}
+            store.save_plan('m', {'tasks': [spec('T1', []), spec('T2', ['T1'])]})
+            for target in ('PLANNING', 'RUNNING', 'BLOCKED'):
+                store.transition('m', target)
+            store.transition('m', 'BLOCKED', 'T1')
+            store.transition('m', 'BLOCKED', 'T2')
+            with store.db:
+                store.db.execute("UPDATE tasks SET attempts=4, fixes=3 WHERE mission='m'")
+            self.assertEqual(sorted(store.reopen_blocked('m')), ['T1', 'T2'])
+            rows = {t['id']: (t['state'], t['attempts'], t['fixes']) for t in store.tasks('m')}
+            self.assertEqual(rows, {'T1': ('PENDING', 0, 0), 'T2': ('PENDING', 0, 0)})
+            self.assertTrue(store.db.execute("SELECT 1 FROM events WHERE type='TASKS_REOPENED'").fetchone())
+            store.db.close()

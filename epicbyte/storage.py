@@ -89,6 +89,21 @@ class Store:
     def tasks(self, ident):
         return [dict(r) for r in self.db.execute('SELECT * FROM tasks WHERE mission=? ORDER BY rowid', (ident,))]
 
+    def reopen_blocked(self, mission):
+        """Decisão do operador: devolve tarefas BLOCKED/FAILED a PENDING com tentativas zeradas.
+        Tarefas APPROVED não mudam; o motor só libera cada uma quando as dependências estiverem aprovadas."""
+        if self.mission(mission)['state'] not in ('BLOCKED', 'FAILED', 'PAUSED'):
+            raise ValueError('Só missões bloqueadas, com falha ou pausadas podem reabrir tarefas')
+        reopened = [t['id'] for t in self.tasks(mission) if t['state'] in ('BLOCKED', 'FAILED')]
+        for task in reopened:
+            self.transition(mission, 'PENDING', task)
+        with self.db:
+            if reopened:
+                marks = ','.join('?' * len(reopened))
+                self.db.execute(f'UPDATE tasks SET attempts=0, fixes=0 WHERE mission=? AND id IN ({marks})', (mission, *reopened))
+            self.event(mission, 'TASKS_REOPENED', tasks=reopened)
+        return reopened
+
     def transition(self, mission, target, task=None):
         with self.db:
             if task:

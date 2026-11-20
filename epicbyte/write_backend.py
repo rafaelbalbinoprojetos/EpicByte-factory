@@ -85,7 +85,7 @@ def validate_edits(workspace, edits):
     for edit in edits:
         if not isinstance(edit, dict) or set(edit) != {'path', 'content'}:
             raise SafetyError('Somente criação/substituição de conteúdo; exclusão e comandos recusados')
-        path = relative_file(workspace, edit['path'])
+        path = relative_file(workspace, edit['path'], write=True)
         key = str(path).casefold()
         if key in names or not isinstance(edit['content'], str) or len(edit['content'].encode()) > 1000000:
             raise SafetyError('Edição inválida ou duplicada')

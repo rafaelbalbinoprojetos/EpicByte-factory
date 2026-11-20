@@ -1,4 +1,4 @@
-import {CheckCircle2, Clock3, ExternalLink, FileCheck2, Layers3, Pause, Play, ShieldCheck, Terminal, Users, XCircle} from 'lucide-react';
+import {CheckCircle2, Clock3, ExternalLink, RotateCcw, FileCheck2, Layers3, Pause, Play, ShieldCheck, Terminal, Users, XCircle} from 'lucide-react';
 import {useNavigate, useParams} from 'react-router-dom';
 import {PageHeading} from '@/components/layout/AppShell';
 import {NewMissionButton} from '@/pages/Dashboard';
@@ -78,6 +78,16 @@ function MissionDetail({data, mission}: {data: FactoryState; mission: Mission}) 
           <Button variant="secondary" disabled={busy || !['PAUSED', 'BLOCKED', 'FAILED'].includes(mission.state)} onClick={() => operate(`missions/${mission.id}/resume`)}>
             <Play size={15} />Retomar
           </Button>
+          {['BLOCKED', 'FAILED'].includes(mission.state) && mission.tasks.some(t => ['BLOCKED', 'FAILED'].includes(t.state)) && (
+            <Button
+              variant="secondary"
+              disabled={busy}
+              title="Devolve as tarefas bloqueadas para pendente com tentativas zeradas. Use quando a falha foi do ambiente ou da fábrica."
+              onClick={() => operate(`missions/${mission.id}/reopen`)}
+            >
+              <RotateCcw size={15} />Reabrir tarefas
+            </Button>
+          )}
           {isWeb && (
             <Button variant="secondary" disabled={busy || !built} title={built ? 'Abre o build atual numa porta própria' : 'Disponível depois do primeiro build aprovado nas verificações'} onClick={openSite}>
               <ExternalLink size={15} />Abrir site

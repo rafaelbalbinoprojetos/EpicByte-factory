@@ -240,6 +240,10 @@ def make_server(db, root, port=8780):
                         store.db.execute('UPDATE missions SET pause=1 WHERE id=?',(ident,)); store.event(ident,'PAUSE_REQUESTED')
                     if not store.db.execute('SELECT 1 FROM locks WHERE mission=?',(ident,)).fetchone() and mission['state'] != 'PAUSED': store.transition(ident,'PAUSED')
                     return self.reply({'pause_requested':ident})
+                if action == 'reopen':
+                    with gate:
+                        if ident in workers and workers[ident].poll() is None: raise ValueError('Worker ativo')
+                        return self.reply({'reopened': store.reopen_blocked(ident)})
                 if action == 'preview':
                     workspace = within(within(root, root / 'workspaces'), Path(mission['workspace']))
                     if not is_web(workspace): raise ValueError('Missão sem projeto web')

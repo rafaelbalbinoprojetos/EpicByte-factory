@@ -38,13 +38,13 @@ def within(root, path):
     return path
 
 
-def relative_file(root, name):
+def relative_file(root, name, write=False):
     if not isinstance(name, str) or not name or '\\' in name or ':' in name or PureWindowsPath(name).is_absolute():
         raise SafetyError('Nome de arquivo inválido')
     parts = Path(name).parts
     if any(p.casefold() in ('.git', '.codex', '.agents', '.aws', '..') or p.endswith((' ', '.')) or p.upper().split('.')[0] in ('CON', 'NUL', 'PRN', 'AUX', 'COM1', 'LPT1') for p in parts):
         raise SafetyError('Caminho protegido')
-    if any(p.casefold() in GENERATED_DIRS for p in parts[:-1]) or parts[-1].casefold() in LOCKED_FILES:
+    if write and (any(p.casefold() in GENERATED_DIRS for p in parts[:-1]) or parts[-1].casefold() in LOCKED_FILES):
         raise SafetyError('Arquivo gerado ou de dependências: só o motor altera')
     return within(root, Path(root) / name)
 
