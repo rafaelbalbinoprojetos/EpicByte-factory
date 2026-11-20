@@ -5,8 +5,11 @@
 Cada marco entrega algo que funciona de ponta a ponta antes do próximo.
 
 ## Marco 1 — Provar o ciclo completo
-- [ ] Missão pequena (Python, sem npm) criada pela interface e executada até COMPLETED
-- [ ] Corrigir o que quebrar no caminho (interface, motor, agentes)
+- [x] Missão pequena (Python, sem npm) executada até COMPLETED — `mission_a17ffc008803`, 4 tarefas aprovadas de primeira
+- [x] Corrigir o que quebrar no caminho: porta 8765 em conflito (agora 8780); agentes sem Python/Git/Node no PATH; QA reprovava tarefa correta por comando fora do escopo
+- [ ] Commitar o trabalho aprovado no workspace (hoje os arquivos ficam não rastreados na `develop`)
+- [ ] Product Owner deve ampliar critérios literais (a CLI pedida só com `100 C F` saiu só C→F)
+- [ ] Dashboard: não mostrar "Certificação necessária" como bloqueio logo após reiniciar; rodar o diagnóstico ao subir
 - [ ] Arquivar as missões pausadas antigas
 
 **Pronto quando:** uma missão criada na tela termina COMPLETED com código no workspace e testes verdes.
