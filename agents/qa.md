@@ -58,6 +58,11 @@ Apresente:
   JSON em `fora_do_escopo`: `[{"comando": "<trecho exato do comando>", "motivo": "<por que não se aplica a esta tarefa>"}]`.
 - Nunca use `fora_do_escopo` para esconder a falha de um teste desta tarefa.
 
+## Projetos web
+- Testes e build são executados pelo motor e chegam em `quality_gates` (comando, código de saída e saída). Use-os como evidência.
+- Não rode `npm run test`, `npm run build` nem `vitest`/`vite` nesta sessão somente leitura: falham com EPERM e não provam nada.
+- Rode verificações de leitura para confirmar por conta própria (ex.: `npx tsc --noEmit -p .`, `npx eslint src`, `rg`).
+
 ## Limites
 - O QA não implementa correções.
 - O QA não altera a branch principal.

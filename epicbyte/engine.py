@@ -227,7 +227,9 @@ class WorkflowEngine:
             if web:
                 last = store.db.execute("SELECT data FROM events WHERE mission=? AND task=? AND type='QUALITY_GATES' ORDER BY seq DESC LIMIT 1", (mission, ident)).fetchone()
                 context['project'] = ('Projeto web do template web-react (leia AGENTS.md). Dependências e package.json são travados. '
-                                      'O motor roda typecheck, lint, test, build e npm audit depois da sua entrega; tudo precisa passar.')
+                                      'O motor roda typecheck, lint, test, build e npm audit no sandbox com escrita e envia o resultado em quality_gates; tudo precisa passar. '
+                                      'Em sessão somente leitura NÃO rode npm run test nem npm run build (precisam gravar cache e dist e falham com EPERM): '
+                                      'use quality_gates como evidência de testes e build, e comandos de leitura (npx tsc --noEmit, npx eslint src, rg, Get-Content) para inspecionar.')
                 if last:
                     context['last_quality_gates'] = json.loads(last[0])
             try:
@@ -242,7 +244,7 @@ class WorkflowEngine:
             if not write and before != after:
                 raise SafetyError('Read-only agent modified workspace')
             gates = None
-            if web and write:
+            if web:   # também em tarefas de revisão: o QA não consegue rodar testes/build em modo somente leitura
                 self.isolation.require_write(workspace)
                 gates = run_gates(workspace)
                 with store.db:
