@@ -79,6 +79,26 @@ def audit_approved(report, spec, workspace):
     return True
 
 
+def security_approved(report, workspace):
+    """A revisão de segurança avalia os próprios critérios (caminhos, credenciais, comandos, dependências),
+    não os critérios funcionais da tarefa: aprova com veredito APPROVED e todos os critérios aprovados e com evidência."""
+    if report.get('verdict') != 'APPROVED':
+        return False
+    criteria = report.get('criteria')
+    if not isinstance(criteria, list) or not criteria:
+        return False
+    for criterion in criteria:
+        if not isinstance(criterion, dict) or criterion.get('status') != 'APPROVED' or not criterion.get('evidence'):
+            return False
+        paths = criterion.get('files', [])
+        if not isinstance(paths, list):
+            return False
+        for path in paths:
+            if not relative_file(workspace, path).is_file():
+                return False
+    return True
+
+
 def test_evidence(result, report=None):
     """Comandos vêm das notificações do App Server, nunca do texto do agente.
 
@@ -287,7 +307,7 @@ class WorkflowEngine:
                 raise ProviderError('Auditoria deve usar sessão independente')
             if snapshot(workspace) != after:
                 raise SafetyError('Auditoria alterou arquivos do workspace')
-            if not audit_approved(security, spec, workspace):
+            if not security_approved(security, workspace):
                 with store.db:
                     store.event(mission, 'REVIEW_REJECTED', ident, agent='security_reviewer', report=security)
                 return self.fix(mission, ident)

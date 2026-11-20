@@ -228,7 +228,8 @@ class CodexProvider(Provider):
                 if cancelled():
                     raise ProviderError('Execução pausada antes da escrita')
                 report = object_report(result.text)
-                report['files'] = apply_edits(workspace, report.get('edits'))
+                edits = report.get('edits')
+                report['files'] = apply_edits(workspace, edits) if edits else []   # nada a mudar: segue para revisão
                 result.text = json.dumps(report, ensure_ascii=False)
             return result
         finally:

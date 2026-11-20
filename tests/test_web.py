@@ -92,3 +92,17 @@ class ReopenTests(unittest.TestCase):
             self.assertEqual(rows, {'T1': ('PENDING', 0, 0), 'T2': ('PENDING', 0, 0)})
             self.assertTrue(store.db.execute("SELECT 1 FROM events WHERE type='TASKS_REOPENED'").fetchone())
             store.db.close()
+
+
+class SecurityApprovalTests(unittest.TestCase):
+    def test_security_uses_its_own_criteria(self):
+        from epicbyte.engine import security_approved
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, 'App.tsx').write_text('x', encoding='utf-8')
+            ok = {'verdict': 'APPROVED', 'criteria': [{'index': i, 'status': 'APPROVED', 'evidence': 'ok', 'files': ['App.tsx']} for i in range(5)]}
+            self.assertTrue(security_approved(ok, d))
+            self.assertFalse(security_approved({**ok, 'verdict': 'REJECTED'}, d))
+            self.assertFalse(security_approved({'verdict': 'APPROVED', 'criteria': []}, d))
+            bad = {'verdict': 'APPROVED', 'criteria': [{'index': 0, 'status': 'REJECTED', 'evidence': 'x'}]}
+            self.assertFalse(security_approved(bad, d))
+            self.assertFalse(security_approved({'verdict': 'APPROVED', 'criteria': [{'index': 0, 'status': 'APPROVED', 'evidence': ''}]}, d))
