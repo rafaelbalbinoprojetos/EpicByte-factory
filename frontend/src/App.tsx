@@ -30,7 +30,7 @@ function Login({onAccess}: {onAccess: (value: string) => void}) {
     <main className="mx-auto max-w-md px-6 pt-[15vh]">
       <Rocket size={40} className="text-accent" />
       <h1 className="my-3 text-[28px] font-semibold text-ink-strong">EpicByte Factory</h1>
-      <p className="text-[13px] text-ink-muted">Abra o endereço de acesso exibido pelo inicializador local.</p>
+      <p className="text-[13px] text-ink-muted">Digite a senha da fábrica (ou abra o endereço com a chave exibido pelo inicializador).</p>
       <form
         className="mt-8 flex flex-col gap-4"
         onSubmit={e => {
@@ -40,7 +40,7 @@ function Login({onAccess}: {onAccess: (value: string) => void}) {
           onAccess(value);
         }}
       >
-        <label>Chave da sessão local<input name="access" type="password" required autoComplete="off" /></label>
+        <label>Senha de acesso<input name="access" type="password" required autoComplete="off" /></label>
         <Button type="submit" className="w-full">Conectar</Button>
       </form>
     </main>
@@ -48,7 +48,15 @@ function Login({onAccess}: {onAccess: (value: string) => void}) {
 }
 
 function Routed() {
-  const {data} = useFactory();
+  const {data, networkError, disconnect} = useFactory();
+  if (!data && /acesso negado|Sessão expirada/i.test(networkError)) {
+    return (
+      <main className="mx-auto max-w-md px-6 pt-[15vh]">
+        <div role="alert" className="mb-5 rounded-md border border-danger-line bg-danger-bg px-4 py-3 text-[13px] text-danger">Senha incorreta ou sessão expirada.</div>
+        <Button className="w-full" onClick={disconnect}>Tentar outra senha</Button>
+      </main>
+    );
+  }
   if (!data) return <div className="p-10"><Empty loading>Carregando operação local…</Empty></div>;
   return (
     <Routes>

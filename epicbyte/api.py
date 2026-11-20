@@ -1,4 +1,5 @@
 """Local Mission Control API; Python remains the execution authority."""
+import os
 import hmac
 import sqlite3
 from .studio import Studio, capabilities
@@ -17,12 +18,24 @@ from .cli import status, create_mission
 from .safety import within, IsolationPolicy
 
 
+def fixed_password(root):
+    """Senha fixa opcional: variável EPICBYTE_PASSWORD ou .factory/senha.txt (fora do Git).
+    Sem nenhuma das duas, cada inicialização gera uma chave aleatória."""
+    value = os.environ.get('EPICBYTE_PASSWORD', '').strip()
+    if not value:
+        try:
+            value = (Path(root) / '.factory' / 'senha.txt').read_text(encoding='utf-8').strip()
+        except OSError:
+            value = ''
+    return value or None
+
+
 def make_server(db, root, port=8780):
     root = Path(root).resolve()
     initial = Store(db)
     try: Studio(initial, root)
     finally: initial.db.close()
-    access = secrets.token_urlsafe(32)
+    access = fixed_password(root) or secrets.token_urlsafe(32)
     workers = {}
     gate = threading.Lock()
     studio_gate = threading.Lock()
@@ -251,7 +264,10 @@ def serve(store, port=8780):
     from .cli import ROOT
     db = store.db.execute('PRAGMA database_list').fetchone()[2]
     server = make_server(db,ROOT,port)
-    print(f'Mission Control: http://127.0.0.1:{port}/#access={server.access}',flush=True)
+    if fixed_password(ROOT):
+        print(f'Mission Control: http://127.0.0.1:{port}/  (entre com a senha configurada)',flush=True)
+    else:
+        print(f'Mission Control: http://127.0.0.1:{port}/#access={server.access}',flush=True)
     try: server.serve_forever()
     except KeyboardInterrupt: pass
     finally:
