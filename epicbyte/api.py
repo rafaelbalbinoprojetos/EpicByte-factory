@@ -266,6 +266,32 @@ def make_server(db, root, port=8780):
 
         def log_message(self,*args): pass
 
+    def resume_after_quota():
+        """A cada minuto: missão pausada por limite de uso, cujo horário chegou, volta a rodar sozinha."""
+        from datetime import datetime
+        while not stopping.wait(60):
+            try:
+                watcher = Store(db, initialize=False)
+                try:
+                    for (ident,) in watcher.db.execute("SELECT id FROM missions WHERE state='PAUSED'").fetchall():
+                        last = watcher.db.execute('SELECT type,data FROM events WHERE mission=? ORDER BY seq DESC LIMIT 3', (ident,)).fetchall()
+                        quota = next((json.loads(d or '{}') for t, d in last if t == 'QUOTA_EXHAUSTED'), None)
+                        if not quota or not quota.get('retry_at') or datetime.fromisoformat(quota['retry_at']) > datetime.now().astimezone():
+                            continue
+                        with gate:
+                            if ident in workers and workers[ident].poll() is None: continue
+                            if watcher.db.execute('SELECT 1 FROM locks WHERE mission=?', (ident,)).fetchone(): continue
+                            with watcher.db:
+                                watcher.db.execute('UPDATE missions SET pause=0 WHERE id=?', (ident,))
+                                watcher.event(ident, 'RESUME_REQUESTED', reason='Retomada automática após o limite de uso')
+                            workers[ident] = subprocess.Popen([sys.executable, '-m', 'epicbyte.worker', str(db), ident], cwd=root)
+                finally:
+                    watcher.db.close()
+            except Exception:
+                pass
+
+    threading.Thread(target=resume_after_quota, daemon=True).start()
+
     class LocalServer(ThreadingHTTPServer):
         request_queue_size = 64
         daemon_threads = False

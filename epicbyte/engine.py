@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from .executor import AgentExecutor
 from .model import validate_plan, validate_approved_tasks
-from .provider import ProviderError, ProviderUnavailable
+from .provider import ProviderError, ProviderUnavailable, QuotaExhausted
 from .safety import IsolationPolicy, SafetyError, snapshot, relative_file, within
 from .storage import now
 from .web import commit_task, is_web, run_gates, run_visual
@@ -249,6 +249,16 @@ class WorkflowEngine:
                 if not ready:
                     raise ProviderError('Nenhuma tarefa pronta; dependências bloqueadas ou falhas')
                 self.execute_task(mission, ready[0])
+        except QuotaExhausted as error:
+            # Limite de uso: pausa e deixa o horário de retomada para o servidor continuar sozinho.
+            retry_at = error.retry_at.isoformat() if error.retry_at else None
+            with store.db:
+                store.db.execute('UPDATE missions SET pause=1 WHERE id=?', (mission,))
+                store.event(mission, 'QUOTA_EXHAUSTED', retry_at=retry_at, error=str(error)[:300])
+            if store.mission(mission)['state'] not in ('PAUSED', 'COMPLETED'):
+                store.transition(mission, 'PAUSED')
+            with store.db:
+                store.event(mission, 'MISSION_PAUSED', error='Limite de uso do provedor; retomada automática em ' + str(retry_at))
         except Exception as error:
             state = store.mission(mission)
             target = 'PAUSED' if state['pause'] else 'BLOCKED'
@@ -357,9 +367,12 @@ class WorkflowEngine:
             except Exception as error:
                 with store.db:
                     store.event(mission, 'COMMIT_SKIPPED', ident, reason=str(error)[:300])
-        except ProviderUnavailable:
+        except ProviderUnavailable as error:
             if next(t for t in store.tasks(mission) if t['id'] == ident)['state'] in ('RUNNING', 'REVIEW', 'TESTING'):
                 store.transition(mission, 'FIX_REQUIRED', ident)
+            if isinstance(error, QuotaExhausted):   # culpa da conta, não do código: devolve a tentativa
+                with store.db:
+                    store.db.execute('UPDATE tasks SET attempts=MAX(attempts-1,0) WHERE mission=? AND id=?', (mission, ident))
             raise
         except SafetyError as error:
             self.block(mission, ident, str(error))

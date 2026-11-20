@@ -24,6 +24,37 @@ class ProviderUnavailable(ProviderError):
     pass
 
 
+class QuotaExhausted(ProviderUnavailable):
+    """Limite de uso da conta do provedor: não é erro da tarefa; a missão pausa e retoma quando liberar."""
+    def __init__(self, message, retry_at=None):
+        super().__init__(message)
+        self.retry_at = retry_at   # datetime local (aware) ou None
+
+
+def quota_retry_at(message, now=None):
+    """Extrai 'try again at 3:32 AM' (ou '15:32') e devolve o próximo horário local correspondente."""
+    import re
+    from datetime import datetime, timedelta
+    match = re.search(r'try again at\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])?', message or '')
+    now = now or datetime.now().astimezone()
+    if not match:
+        return now + timedelta(hours=1)
+    hour, minute, meridiem = int(match[1]), int(match[2]), (match[3] or '').upper()
+    if meridiem == 'PM' and hour != 12:
+        hour += 12
+    if meridiem == 'AM' and hour == 12:
+        hour = 0
+    target = now.replace(hour=hour % 24, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return target + timedelta(minutes=2)   # margem para o provedor liberar
+
+
+def is_quota_error(text):
+    text = (text or '').lower()
+    return 'usage limit' in text or 'usagelimit' in text or 'rate limit' in text and 'try again' in text
+
+
 @dataclass
 class Result:
     text: str
@@ -178,7 +209,10 @@ def collect_turn(rpc, thread, turn, deadline, cancelled=lambda: False):
                 raise IncompleteTurn('Turno sem relatório final')
             return Result(reports[-1], thread, turn, commands, usage)
         elif method == 'error' and not params.get('willRetry', False):
-            raise ProviderError('Erro no turno: ' + str(params.get('error', {})))
+            detail = str(params.get('error', {}))
+            if is_quota_error(detail):
+                raise QuotaExhausted('Limite de uso do provedor: ' + detail[:300], quota_retry_at(detail))
+            raise ProviderError('Erro no turno: ' + detail)
 
 
 class CodexProvider(Provider):
