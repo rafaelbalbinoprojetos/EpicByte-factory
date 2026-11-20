@@ -15,7 +15,7 @@ def clean(value):
     if isinstance(value, list):
         return [clean(v) for v in value]
     if isinstance(value, str):
-        value = re.sub(r'(?i)Bearer\s+\S+|sk-[\w-]+', '[REDACTED]', value)
+        value = re.sub(r'(?i)Bearer\s+\S+|(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{16,}', '[REDACTED]', value)  # sem pegar TASK-001
         value = re.sub(r'(?i)((?:token|password|secret|api_key|authorization)\s*[:=]\s*)[^\s,;]+', r'\1[REDACTED]', value)
     return value
 

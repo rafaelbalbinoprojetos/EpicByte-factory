@@ -30,6 +30,8 @@ Cada marco entrega algo que funciona de ponta a ponta antes do próximo.
 
 ## Marco 4 — Interface como central de produção
 - [ ] Tela de Projetos: screenshots, verificações, README, Abrir site, Rodar verificações
+- [x] Interface reorganizada: Tailwind 4 com tokens, componentes shadcn/Radix, TanStack Query, rotas, RHF+Zod, Motion, fontes empacotadas
+- [ ] Atualizar Vite 6→7 e Vitest 2→4 (avisos do npm audit só no servidor de desenvolvimento)
 - [ ] Painel ao vivo dos agentes
 - [ ] Perguntas e aprovações na própria tela
 

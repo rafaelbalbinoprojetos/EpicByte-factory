@@ -12,7 +12,7 @@ const mission={id:'mission_real',source:'# Missão real',state:'CREATED',created
 
 const state={missions:[mission],events:[],executions:[],evidence:[],agents:[],diagnostic:{isolation_certified:false},workspaces:[{id:'managed',label:'Workspace autorizado'}],limits:{},versions:{}};
 
-beforeEach(()=>{sessionStorage.setItem('epicbyte-access','local');vi.stubGlobal('fetch',vi.fn(async (url:string)=>({ok:true,json:async()=>url==='/api/state'?state:{dry_run:true},body:{getReader:()=>({read:async()=>({done:true})})}})))});
+beforeEach(()=>{window.history.replaceState(null,'','/');sessionStorage.setItem('epicbyte-access','local');vi.stubGlobal('fetch',vi.fn(async (url:string)=>({ok:true,json:async()=>url==='/api/state'?state:{dry_run:true},body:{getReader:()=>({read:async()=>({done:true})})}})))});
 
 afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.useRealTimers()});
 
@@ -24,7 +24,7 @@ describe('contratos e controles',()=>{
 
  it('início chama backend e pausa é operacional',async()=>{render(<App/>);fireEvent.click(await screen.findByText('Missão real'));fireEvent.click(screen.getByRole('button',{name:'Iniciar'}));await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/missions/mission_real/start',expect.objectContaining({method:'POST'})));expect(screen.getByRole('button',{name:'Retomar'})).toBeDisabled()});
 
- it('creator usa raiz autorizada e dry-run',async()=>{render(<App/>);await screen.findByText('Missão real');fireEvent.click(screen.getByRole('button',{name:'Mission Creator'}));fireEvent.change(screen.getByLabelText('Nome da missão'),{target:{value:'Teste'}});fireEvent.change(screen.getByLabelText('Descrição detalhada'),{target:{value:'Objetivo'}});fireEvent.change(screen.getByLabelText('Critérios de aceite'),{target:{value:'Testes'}});fireEvent.click(screen.getByRole('button',{name:'Criar missão'}));await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/missions',expect.objectContaining({body:expect.stringContaining('"dry_run":true')})));expect(screen.getByText('Dry-run validado')).toBeInTheDocument()});
+ it('creator usa raiz autorizada e dry-run',async()=>{render(<App/>);await screen.findByText('Missão real');fireEvent.click(screen.getByRole('link',{name:'Mission Creator'}));fireEvent.change(screen.getByLabelText('Nome da missão'),{target:{value:'Teste'}});fireEvent.change(screen.getByLabelText('Descrição detalhada'),{target:{value:'Objetivo'}});fireEvent.change(screen.getByLabelText('Critérios de aceite'),{target:{value:'Testes'}});fireEvent.click(screen.getByRole('button',{name:'Criar missão'}));await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/missions',expect.objectContaining({body:expect.stringContaining('"dry_run":true')})));expect(screen.getByText('Dry-run validado')).toBeInTheDocument()});
 
  it('mostra rejeição de segurança do backend',async()=>{render(<App/>);fireEvent.click(await screen.findByText('Missão real'));vi.mocked(fetch).mockResolvedValueOnce({ok:false,json:async()=>({error:'Isolamento não certificado'})} as Response);fireEvent.click(screen.getByRole('button',{name:'Iniciar'}));expect(await screen.findByRole('alert')).toHaveTextContent('Isolamento não certificado')});
 

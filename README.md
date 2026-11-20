@@ -91,6 +91,18 @@ O host de navegador automatizado informou indisponibilidade. O controle nativo f
 
 Próximas validações: concluir o smoke real multimodal no host, inspecionar o layout visualmente e certificar o sandbox antes de uma missão de escrita. Evoluções de produto posteriores: edição das preferências já anexadas e revisão conversacional de requisitos, tratamento seguro de SVG, extração de PDF e pipeline de vídeo. A revisão estruturada atual é funcional, porém ainda exige JSON para alterações detalhadas de requisitos e design; respostas e decisões já podem ser registradas em linguagem natural.
 
+## Interface (frontend/)
+
+React 19 + TypeScript + Vite, servida pelo backend em produção. Direção visual **Mission Control** (grafite, ciano, dark).
+
+- **Tailwind CSS 4** com tokens de design em `src/styles/index.css` (`@theme`): cores, fontes, raios e sombras num só lugar.
+- **Componentes** no padrão shadcn/ui em `src/components/ui/` (Radix para o diálogo acessível, `cva` para variantes).
+- **TanStack Query** guarda o estado; o laço de eventos SSE (`src/hooks/useFactory.tsx`) mantém reconexão e timeout de heartbeat.
+- **React Router** (HashRouter): uma URL por tela e por missão (`#/missoes/<id>`).
+- **React Hook Form + Zod** no formulário técnico, espelhando os limites do backend.
+- **Motion** para transições sutis; **ECharts 6** só com dados reais; **Inter** e **JetBrains Mono** empacotadas (sem internet).
+- Estrutura: `pages/` (6 telas), `components/layout/AppShell.tsx`, `lib/` (tipos e formatação), `api.ts`.
+
 ## Estrutura
 
 - `epicbyte/`: motor, API, provedor Codex, segurança e Studio.

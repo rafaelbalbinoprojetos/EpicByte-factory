@@ -1,0 +1,115 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+/* ── Mission Control: tokens de design (única fonte de cores, fontes, raios e sombras) ── */
+@theme {
+  --font-sans: "Inter Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", Consolas, monospace;
+
+  /* superfícies: grafite profundo */
+  --color-canvas: #090e15;
+  --color-sidebar: #0c121b;
+  --color-surface: #101925;
+  --color-surface-2: #142231;
+  --color-inset: #09111b;
+  --color-line: #1a2635;
+  --color-line-strong: #223145;
+  --color-line-input: #2b3c50;
+
+  /* texto */
+  --color-ink: #dce6f3;
+  --color-ink-strong: #eef5ff;
+  --color-ink-soft: #a5b7ca;
+  --color-ink-muted: #7e91a9;
+  --color-ink-faint: #53667d;
+
+  /* acentos: ciano e azul elétrico */
+  --color-accent: #31c5dd;
+  --color-accent-strong: #4dd3e9;
+  --color-accent-soft: #102732;
+  --color-accent-line: #194354;
+  --color-accent-ink: #07151c;
+  --color-electric: #3b82f6;
+
+  /* estados */
+  --color-ok: #5cdbb2;
+  --color-ok-bg: #11332980;
+  --color-ok-line: #225746;
+  --color-run: #50ceee;
+  --color-run-bg: #12313d;
+  --color-run-line: #245464;
+  --color-warn: #e9ac6c;
+  --color-warn-bg: #392a1a80;
+  --color-warn-line: #5a4026;
+  --color-danger: #ffbea7;
+  --color-danger-bg: #3b211d;
+  --color-danger-line: #744135;
+
+  --radius-card: 10px;
+  --radius-control: 7px;
+  --shadow-card: 0 5px 20px #00000026;
+
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+
+@layer base {
+  :root { color-scheme: dark; font-synthesis: none; }
+  html, body { background: var(--color-canvas); color: var(--color-ink); font-family: var(--font-sans); }
+  body { margin: 0; -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font: inherit; }
+  :focus-visible { outline: 2px solid var(--color-accent-strong); outline-offset: 3px; }
+
+  /* formulários (inclusive os do Studio) */
+  label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--color-ink-soft); }
+  input:not([type=checkbox]):not([type=file]), textarea, select {
+    background: #0b131e; border: 1px solid var(--color-line-input); border-radius: 6px;
+    color: #d2dfec; padding: 11px 12px; font-size: 13px; outline: none; max-width: 100%;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--color-accent); box-shadow: 0 0 0 3px #31c5dd1a; }
+  input::placeholder, textarea::placeholder { color: #4d627b; }
+  input[type=checkbox] { accent-color: var(--color-accent); }
+  textarea { resize: vertical; }
+
+  pre {
+    font: 11px/1.7 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
+    background: var(--color-inset); border: 1px solid var(--color-line-strong); border-radius: 6px;
+    padding: 16px; color: #9eb8cd; max-height: 60vh; overflow: auto; margin: 0;
+  }
+  details > summary { cursor: pointer; font-size: 12px; color: var(--color-ink-soft); padding: 6px 0; }
+}
+
+/* Classes do Studio (studio.tsx), mapeadas para os tokens até ele virar componentes */
+@layer components {
+  .panel {
+    background: linear-gradient(130deg, #111b28e6, #0e1621f5);
+    border: 1px solid var(--color-line-strong); border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card); padding: 22px; backdrop-filter: blur(6px);
+  }
+  .studio { display: flex; flex-direction: column; gap: 16px; }
+  .studio h2 { font-size: 18px; font-weight: 600; margin: 0; }
+  .studio h3 { font-size: 14px; font-weight: 600; margin: 8px 0 0; }
+  .studio p { font-size: 13px; line-height: 1.7; color: var(--color-ink-muted); margin: 0; }
+  .studio button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; align-self: flex-start;
+    border: 1px solid var(--color-accent); background: var(--color-accent); color: var(--color-accent-ink);
+    border-radius: var(--radius-control); padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .studio button:hover:not(:disabled) { filter: brightness(1.12); }
+  .studio button:disabled { opacity: .36; cursor: not-allowed; }
+  .studio button.secondary { background: var(--color-surface-2); border-color: #304457; color: #afc5da; }
+  .studio blockquote { margin: 0; padding: 14px 18px; border-left: 2px solid var(--color-accent); background: var(--color-inset); border-radius: 0 6px 6px 0; font-size: 13px; }
+  .eyebrow { font: 10px var(--font-mono); letter-spacing: .18em; color: #5d8299; text-transform: uppercase; }
+  .stage-strip { display: flex; flex-wrap: wrap; gap: 8px; }
+  .stage-strip span { font-size: 11px; color: var(--color-ink-muted); border: 1px solid var(--color-line-strong); background: var(--color-surface); border-radius: 6px; padding: 6px 10px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+  .reference-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .dropzone { border: 1px dashed #28394d; border-radius: 8px; padding: 26px; text-align: center; cursor: pointer; }
+  .error { background: var(--color-danger-bg); color: var(--color-danger); border: 1px solid var(--color-danger-line); padding: 12px 16px; border-radius: 6px; font-size: 13px; }
+  .small { font-size: 11px; }
+  .muted { color: var(--color-ink-muted); }
+}
