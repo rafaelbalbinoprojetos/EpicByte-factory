@@ -17,7 +17,7 @@ class DiagnosticsTests(unittest.TestCase):
             self.assertEqual(codex_command(), ['C:/node.exe', str(Path('C:/npm/node_modules/@openai/codex/bin/codex.js'))])
 
     def test_missing_install_fails_closed(self):
-        with patch('epicbyte.provider.shutil.which', return_value=None):
+        with patch('epicbyte.provider.shutil.which', return_value=None), patch.dict('os.environ', {'APPDATA': ''}):
             with self.assertRaisesRegex(RuntimeError, 'indisponível'):
                 codex_command()
 
